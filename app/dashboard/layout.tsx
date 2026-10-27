@@ -46,7 +46,7 @@ export default function DashboardLayout({
     <div className="min-h-screen flex flex-col bg-[#080d16] text-slate-100">
       {/* Top Navbar */}
       <header className="sticky top-0 z-50 border-b border-slate-800/80 bg-[#0b121e]/90 backdrop-blur-md px-4 sm:px-6 py-3">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+        <div className="max-w-[1600px] mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="h-9 w-9 rounded-lg bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-md shadow-cyan-500/20 font-mono font-bold text-white text-sm">
               OI
@@ -82,7 +82,7 @@ export default function DashboardLayout({
       </header>
 
       {/* Main body */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 flex flex-col gap-6">
+      <main className="flex-1 max-w-[1600px] w-full mx-auto p-3 sm:p-5 flex flex-col gap-4">
         {children}
       </main>
 
