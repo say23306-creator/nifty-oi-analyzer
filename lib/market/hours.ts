@@ -52,6 +52,14 @@ export function dayOfWeekIST(date: Date = new Date()): number {
 }
 
 /**
+ * Minutes from midnight in IST.
+ */
+export function minutesFromMidnightIST(now: Date = new Date()): number {
+  const ist = toIST(now);
+  return ist.getHours() * 60 + ist.getMinutes();
+}
+
+/**
  * Returns true if the market is currently open.
  * Conditions:
  *   1. Monday–Friday
@@ -68,7 +76,7 @@ export function isMarketOpen(now: Date = new Date()): boolean {
   if (isNseHoliday(dateStr)) return false;
 
   const { openHour, openMinute, closeHour, closeMinute } = config.market;
-  const totalMinutes = ist.getHours() * 60 + ist.getMinutes();
+  const totalMinutes = minutesFromMidnightIST(now);
   const openTotal = openHour * 60 + openMinute;   // 555
   const closeTotal = closeHour * 60 + closeMinute; // 930
 

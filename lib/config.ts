@@ -15,16 +15,10 @@ export const config = {
 
   // ── Data collection ───────────────────────────────────────────────────────
   collection: {
-    /** Max instruments per Kite quote() call */
-    batchSize: parseInt(process.env.BATCH_SIZE ?? '500', 10),
-    /** Delay between batches (ms) — respect Kite rate limits */
-    batchDelayMs: parseInt(process.env.BATCH_DELAY_MS ?? '300', 10),
     /** How many retry attempts for transient errors */
     maxRetries: 3,
     /** Base delay for exponential backoff (ms) */
     retryBaseMs: 1000,
-    /** Instrument cache TTL check — refresh once per calendar day */
-    instrumentCacheTtlHours: 24,
   },
 
   // ── Analysis ──────────────────────────────────────────────────────────────
@@ -51,9 +45,7 @@ export const config = {
   features: {
     enabled: {
       paperTrading: process.env.PAPER_TRADING_MODE === 'true',
-      mlInference: process.env.ML_INFERENCE_ENABLED === 'true',
     },
-    mlModelPath: './models/model.onnx',
   },
 
   // ── Telegram ──────────────────────────────────────────────────────────────
@@ -61,7 +53,7 @@ export const config = {
     /** Maximum message length before splitting (Telegram cap: 4096) */
     maxMessageLength: 4000,
     /** Allowed bot commands */
-    commands: ['/status', '/chain', '/pcr', '/bias', '/mute', '/unmute', '/help'],
+    commands: ['/status', '/ai', '/chain', '/pcr', '/bias', '/mute', '/unmute', '/help'],
   },
 } as const;
 

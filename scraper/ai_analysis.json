@@ -1,0 +1,61 @@
+{
+  "timestamp": "2026-10-27T15:46:09.619Z",
+  "expiry": "2026-10-27",
+  "spot": 22792.05,
+  "bias": "STRONG_BULLISH",
+  "confidence": 75,
+  "headline": "Bullish institutional momentum driven by PE Short Buildup and rising PCR (NaN)",
+  "summary": "Nifty 50 is currently trading near 22792.05. Open Interest distribution shows primary support anchored at 22700 (PE OI concentration) and immediate overhead resistance at 23000 (CE OI concentration). The current Put-Call Ratio of NaN confirms strong_bullish market participation. Max Pain is pegged at 22800, suggesting potential expiry gravitation towards this strike.",
+  "institutionalFlows": {
+    "callWriters": "Cautious/unwinding shorts at ATM",
+    "putWriters": "Dominant put writing at 22700 creating firm floor",
+    "dominantAction": "Put Writers (Bulls)"
+  },
+  "keyLevels": {
+    "support1": 22700,
+    "support2": 22750,
+    "pivot": 22800,
+    "resistance1": 23000,
+    "resistance2": 22800,
+    "maxPain": 22800
+  },
+  "strikeObservations": [
+    {
+      "strike": 20150,
+      "optionType": "CE",
+      "observation": "Long Covering",
+      "stockView": "STRONG_BEARISH",
+      "reasoning": "Long Covering on 20150 CE: price ↓, OI ↓ indicates STRONG_BEARISH equity sentiment."
+    },
+    {
+      "strike": 20250,
+      "optionType": "CE",
+      "observation": "Long Covering",
+      "stockView": "STRONG_BEARISH",
+      "reasoning": "Long Covering on 20250 CE: price ↓, OI ↓ indicates STRONG_BEARISH equity sentiment."
+    },
+    {
+      "strike": 20350,
+      "optionType": "CE",
+      "observation": "Long Covering",
+      "stockView": "STRONG_BEARISH",
+      "reasoning": "Long Covering on 20350 CE: price ↓, OI ↓ indicates STRONG_BEARISH equity sentiment."
+    },
+    {
+      "strike": 20450,
+      "optionType": "CE",
+      "observation": "Long Covering",
+      "stockView": "STRONG_BEARISH",
+      "reasoning": "Long Covering on 20450 CE: price ↓, OI ↓ indicates STRONG_BEARISH equity sentiment."
+    }
+  ],
+  "strategyRecommendation": {
+    "name": "Bull Put Spread",
+    "outlook": "Mild to strong bullish continuation",
+    "setup": "Sell 22700 PE / Buy 22750 PE for credit",
+    "riskReward": "Defined Risk (1:2.5)"
+  },
+  "invalidationLevel": 22650,
+  "riskNotice": "Always maintain strict stop losses. Informational derivatives analysis only.",
+  "source": "rules_engine_fallback"
+}

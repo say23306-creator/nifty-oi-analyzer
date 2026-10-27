@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Nifty Institutional OI HUD",
+  "version": "1.0.0",
+  "description": "Zero-Token Institutional Open Interest HUD & Trapped Writer Detector for TradingView, Dhan, and NSE.",
+  "permissions": [
+    "storage",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "http://localhost:8000/*",
+    "https://*/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Nifty Institutional OI"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.tradingview.com/*",
+        "https://*.nseindia.com/*",
+        "https://*.dhan.co/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

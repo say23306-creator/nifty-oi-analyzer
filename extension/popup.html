@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Nifty Institutional OI</title>
+  <style>
+    body {
+      width: 320px;
+      margin: 0;
+      padding: 16px;
+      background: #0f172a;
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+      font-size: 13px;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #1e293b;
+      padding-bottom: 10px;
+      margin-bottom: 12px;
+    }
+    .title {
+      font-weight: bold;
+      color: #38bdf8;
+      font-size: 14px;
+    }
+    .metric {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .label { color: #94a3b8; }
+    .val { font-weight: bold; }
+    .btn {
+      width: 100%;
+      background: #0284c7;
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+      margin-top: 10px;
+    }
+    .btn:hover { background: #0369a1; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span class="title">⚡ Nifty 50 Institutional OI</span>
+  </div>
+  <div class="metric">
+    <span class="label">Nifty Spot:</span>
+    <span class="val" id="spot">Loading...</span>
+  </div>
+  <div class="metric">
+    <span class="label">Market Bias:</span>
+    <span class="val" id="bias">...</span>
+  </div>
+  <div class="metric">
+    <span class="label">Put-Call Ratio:</span>
+    <span class="val" id="pcr">...</span>
+  </div>
+  <div class="metric">
+    <span class="label">Max Pain:</span>
+    <span class="val" id="max_pain">...</span>
+  </div>
+  <button class="btn" id="open-dash">Open Full Screener Dashboard</button>
+
+  <script>
+    fetch('http://localhost:8000/api/summary')
+      .then(r => r.json())
+      .then(d => {
+        document.getElementById('spot').innerText = d.spot ? d.spot.toFixed(2) : '--';
+        document.getElementById('bias').innerText = d.bias;
+        document.getElementById('pcr').innerText = d.pcr;
+        document.getElementById('max_pain').innerText = d.max_pain;
+      })
+      .catch(() => {
+        document.getElementById('spot').innerText = 'Offline (Start Engine)';
+      });
+
+    document.getElementById('open-dash').addEventListener('click', () => {
+      chrome.tabs.create({ url: 'http://localhost:3000/dashboard' });
+    });
+  </script>
+</body>
+</html>
