@@ -1,0 +1,28 @@
+name: Nifty Market Hours Cloud Scheduler
+
+on:
+  schedule:
+    # Runs every 5 minutes from 03:45 UTC to 10:00 UTC, Mon-Fri (IST: 09:15 AM to 03:30 PM)
+    - cron: '*/5 3-10 * * 1-5'
+  workflow_dispatch: # Allows manual trigger from GitHub UI anytime
+
+jobs:
+  collect-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Live Market Data Collection & AI Trap Analysis
+        run: |
+          echo "Pinging Vercel Production API..."
+          RESPONSE=$(curl -s -X GET "https://nifty-oi-analyzer-seven.vercel.app/api/collect" \
+            -H "Authorization: Bearer oi_analyzer_cron_secret_key_2026")
+          echo "Response: $RESPONSE"
+
+  hourly-ai-report:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Trigger Deep AI Institutional Report
+        run: |
+          curl -s -X POST "https://nifty-oi-analyzer-seven.vercel.app/api/ai-analysis" \
+            -H "Content-Type: application/json" \
+            -d '{"broadcastTelegram": true}'
