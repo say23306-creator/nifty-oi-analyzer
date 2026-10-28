@@ -57,7 +57,11 @@ ${buildupLines || '  —'}
 <b>PCR:</b> ${pcr.oi.toFixed(2)} (Δ ${pcr.oiChange >= 0 ? '+' : ''}${pcr.oiChange.toFixed(2)})
 <b>Support  (PE):</b> ${supLine || '—'}
 <b>Resistance (CE):</b> ${resLine || '—'}
-<b>Max Pain:</b> ${maxPain}
+<b>Max Pain:</b> ${maxPain}${
+  result.decision
+    ? `\n\n<b>🎯 PRO TRADER DECISION PLAN:</b>\n• <b>${result.decision.actionHeadline}</b>\n• Strategy: <code>${result.decision.recommendedStrategy}</code>\n• Invalidation Stop-Loss: <code>${result.decision.invalidationLevel}</code>`
+    : ''
+}
 
 ⚠️ <i>Informational only. Not financial advice.</i>`;
   return msg;

@@ -7,6 +7,7 @@ import PCRChart from './components/PCRChart';
 import BiasHistory from './components/BiasHistory';
 import AIMarketInsights from './components/AIMarketInsights';
 import OptionsScreener from './components/OptionsScreener';
+import DecisionEngineCard from './components/DecisionEngineCard';
 import type { DbChainRow } from '@/lib/db/queries';
 import type { AnalysisResult } from '@/lib/analysis/types';
 
@@ -259,6 +260,11 @@ export default function DashboardPage() {
           <span>⚠️</span>
           <span>{error}</span>
         </div>
+      )}
+
+      {/* Pro Trader 5-Stage Decision Framework */}
+      {analysis?.decision && (
+        <DecisionEngineCard decision={analysis.decision} spot={snap?.spot} />
       )}
 
       {/* Main Tab Navigation Bar — Ultra Compact & Intuitive */}

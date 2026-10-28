@@ -9,6 +9,7 @@ import fs from 'fs';
 import path from 'path';
 import type { DbChainRow, DbSignal } from '@/lib/db/queries';
 import type { AnalysisResult, BuildupSignal, OILevel } from '@/lib/analysis/types';
+import { generateTradeDecision } from '@/lib/analysis/decision-engine';
 import { isMarketOpen, nowIST } from '@/lib/market/hours';
 
 export interface ScrapedChainItem {
@@ -189,17 +190,48 @@ export function buildAnalysisFromScraped(scraped: ScrapedDataPayload): AnalysisR
     type: 'CE',
   };
 
-  const isBullish = scraped.pcr >= 1.05;
-  const isBearish = scraped.pcr <= 0.85;
-  const direction = isBullish ? 'BULLISH' : isBearish ? 'BEARISH' : 'NEUTRAL';
-  const confidence = isBullish ? Math.min(95, Math.round(scraped.pcr * 65)) : isBearish ? 80 : 60;
+  const isOverbought = scraped.pcr >= 1.60;
+  const isOversold = scraped.pcr < 0.60;
+  const isBullish = scraped.pcr >= 1.20 && !isOverbought;
+  const isBearish = scraped.pcr <= 0.85 && !isOversold;
+
+  const direction = isOverbought ? 'NEUTRAL' : isOversold ? 'BULLISH' : isBullish ? 'BULLISH' : isBearish ? 'BEARISH' : 'NEUTRAL';
+  const confidence = isOverbought ? 75 : isOversold ? 70 : isBullish ? Math.min(95, Math.round(scraped.pcr * 65)) : isBearish ? 80 : 60;
 
   const reasons = [
-    `PCR (OI) is ${scraped.pcr.toFixed(3)}, indicating ${isBullish ? 'Put writing dominance (Bullish support)' : 'balanced open interest'}.`,
-    `Major Support established at ${scraped.support.toLocaleString('en-IN')} (${(supportLevel.oi / 100000).toFixed(1)}L Put OI).`,
-    `Major Resistance concentrated at ${scraped.resistance.toLocaleString('en-IN')} (${(resistanceLevel.oi / 100000).toFixed(1)}L Call OI).`,
-    `Max Pain strike is positioned at ${scraped.max_pain.toLocaleString('en-IN')}.`,
+    isOverbought
+      ? `PCR (OI) is ${scraped.pcr.toFixed(3)} ≥ 1.60: Extreme Overbought / Complacency zone (Reversal warning).`
+      : isOversold
+      ? `PCR (OI) is ${scraped.pcr.toFixed(3)} < 0.60: Extreme Oversold / Short Squeeze setup alert.`
+      : `PCR (OI) is ${scraped.pcr.toFixed(3)}, indicating ${isBullish ? 'Put writing dominance (Bullish support)' : 'Call writing resistance'}.`,
+    `Active Put Floor (Support) established at ${scraped.support.toLocaleString('en-IN')} (${(supportLevel.oi / 100000).toFixed(1)}L Put OI).`,
+    `Active Call Wall (Resistance) concentrated at ${scraped.resistance.toLocaleString('en-IN')} (${(resistanceLevel.oi / 100000).toFixed(1)}L Call OI).`,
+    `Max Pain expiry gravitational anchor is positioned at ${scraped.max_pain.toLocaleString('en-IN')}.`,
   ];
+
+  const bias = {
+    direction,
+    confidence,
+    reasons,
+  };
+
+  const decision = generateTradeDecision({
+    spot: scraped.spot,
+    pcr: {
+      oi: scraped.pcr,
+      volume: scraped.pcr_volume,
+      oiChange: 0.05,
+      totalCeOI: scraped.total_ce_oi,
+      totalPeOI: scraped.total_pe_oi,
+      totalCeVolume: scraped.total_ce_volume,
+      totalPeVolume: scraped.total_pe_volume,
+    },
+    bias,
+    support: [supportLevel],
+    resistance: [resistanceLevel],
+    maxPain: scraped.max_pain,
+    buildups: allBuildups,
+  });
 
   return {
     snapshotId: 1,
@@ -221,11 +253,8 @@ export function buildAnalysisFromScraped(scraped: ScrapedDataPayload): AnalysisR
     maxPain: scraped.max_pain,
     support: [supportLevel],
     resistance: [resistanceLevel],
-    bias: {
-      direction,
-      confidence,
-      reasons,
-    },
+    bias,
+    decision,
   };
 }
 

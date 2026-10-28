@@ -14,6 +14,7 @@ import {
 import { buildComparisons, classifyAllBuildups, sortByOIChange } from './buildup';
 import { computePCR, computeMaxPain, computeSupportResistance } from './aggregates';
 import { computeBias } from './bias';
+import { generateTradeDecision } from './decision-engine';
 import type { AnalysisResult } from './types';
 
 /**
@@ -65,7 +66,7 @@ export async function runAnalysis(
   // ── Aggregates ────────────────────────────────────────────────────────────
   const pcr = computePCR(currRows, null); // TODO: pass prev PCR from DB for delta
   const maxPain = computeMaxPain(currRows);
-  const { support, resistance } = computeSupportResistance(currRows);
+  const { support, resistance } = computeSupportResistance(currRows, curr.spot);
 
   // ── Bias ──────────────────────────────────────────────────────────────────
   const strikes = [...new Set(currRows.map((r) => r.strike))].sort((a, b) => a - b);
@@ -77,6 +78,17 @@ export async function runAnalysis(
     support,
     resistance,
     strikes,
+  });
+
+  // ── Professional Trade Decision Framework ─────────────────────────────────
+  const decision = generateTradeDecision({
+    spot: curr.spot,
+    pcr,
+    bias,
+    support,
+    resistance,
+    maxPain,
+    buildups,
   });
 
   return {
@@ -92,5 +104,6 @@ export async function runAnalysis(
     support,
     resistance,
     bias,
+    decision,
   };
 }

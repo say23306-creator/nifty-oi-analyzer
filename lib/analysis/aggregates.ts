@@ -108,22 +108,46 @@ export function computeMaxPain(rows: ChainRowInput[]): number {
 /**
  * Support levels = top N PE strikes ranked by OI (where big PE OI acts as a floor).
  * Resistance levels = top N CE strikes ranked by OI (ceiling).
+ *
+ * When spot is provided, calculates Active Trading Walls:
+ *   - Put Wall (Support): Highest PE OI strikes below/near spot
+ *   - Call Wall (Resistance): Highest CE OI strikes above/near spot
  */
-export function computeSupportResistance(rows: ChainRowInput[]): {
+export function computeSupportResistance(
+  rows: ChainRowInput[],
+  spot?: number
+): {
   support: OILevel[];
   resistance: OILevel[];
 } {
-  const peRows = rows
+  const allPe = rows
     .filter((r) => r.type === 'PE' && (r.oi ?? 0) > 0)
-    .map((r) => ({ strike: r.strike, oi: r.oi!, type: 'PE' as const }))
-    .sort((a, b) => b.oi - a.oi)
-    .slice(0, config.analysis.topNLevels);
+    .map((r) => ({ strike: r.strike, oi: r.oi!, type: 'PE' as const }));
 
-  const ceRows = rows
+  const allCe = rows
     .filter((r) => r.type === 'CE' && (r.oi ?? 0) > 0)
-    .map((r) => ({ strike: r.strike, oi: r.oi!, type: 'CE' as const }))
-    .sort((a, b) => b.oi - a.oi)
-    .slice(0, config.analysis.topNLevels);
+    .map((r) => ({ strike: r.strike, oi: r.oi!, type: 'CE' as const }));
+
+  if (spot && spot > 0) {
+    // Put Wall below or at spot (floor)
+    const activePe = allPe.filter((r) => r.strike <= spot + 50).sort((a, b) => b.oi - a.oi);
+    // Call Wall above or at spot (ceiling)
+    const activeCe = allCe.filter((r) => r.strike >= spot - 50).sort((a, b) => b.oi - a.oi);
+
+    const support = (activePe.length > 0 ? activePe : allPe.sort((a, b) => b.oi - a.oi)).slice(
+      0,
+      config.analysis.topNLevels
+    );
+    const resistance = (activeCe.length > 0 ? activeCe : allCe.sort((a, b) => b.oi - a.oi)).slice(
+      0,
+      config.analysis.topNLevels
+    );
+
+    return { support, resistance };
+  }
+
+  const peRows = allPe.sort((a, b) => b.oi - a.oi).slice(0, config.analysis.topNLevels);
+  const ceRows = allCe.sort((a, b) => b.oi - a.oi).slice(0, config.analysis.topNLevels);
 
   return { support: peRows, resistance: ceRows };
 }

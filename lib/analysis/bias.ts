@@ -38,27 +38,39 @@ export function computeBias(input: BiasInput): BiasScore {
   let bullishScore = 50; // start neutral
   const reasons: string[] = [];
 
-  // ── Factor 1: PCR value ───────────────────────────────────────────────────
-  if (pcr.oi > 1.2) {
+  // ── Factor 1: Pro-grade 5-Zone PCR Analysis ───────────────────────────────
+  // Literature (Larry McMillan / NISM):
+  //   ≥ 1.60: Extreme Overbought (put writers crowded, reversal/unwinding risk)
+  //   1.20 – 1.60: Healthy Bullish Put Writing dominance
+  //   0.85 – 1.20: Neutral / Balanced Range
+  //   0.60 – 0.85: Healthy Bearish Call Writing dominance
+  //   < 0.60: Extreme Oversold (call writers crowded, short squeeze alert)
+  if (pcr.oi >= 1.60) {
+    bullishScore -= 5;
+    reasons.push(`PCR ${pcr.oi.toFixed(2)} ≥ 1.60: Extreme Overbought / Complacency zone (Reversal warning)`);
+  } else if (pcr.oi >= 1.20) {
     bullishScore += 15;
-    reasons.push(`PCR ${pcr.oi.toFixed(2)} > 1.2 (bullish)`);
-  } else if (pcr.oi < 0.8) {
+    reasons.push(`PCR ${pcr.oi.toFixed(2)}: Bullish Put-Writing dominance`);
+  } else if (pcr.oi < 0.60) {
+    bullishScore += 5;
+    reasons.push(`PCR ${pcr.oi.toFixed(2)} < 0.60: Extreme Oversold / Short Squeeze alert (Contrarian bounce setup)`);
+  } else if (pcr.oi <= 0.85) {
     bullishScore -= 15;
-    reasons.push(`PCR ${pcr.oi.toFixed(2)} < 0.8 (bearish)`);
+    reasons.push(`PCR ${pcr.oi.toFixed(2)}: Bearish Call-Writing dominance`);
   } else {
-    reasons.push(`PCR ${pcr.oi.toFixed(2)} neutral zone`);
+    reasons.push(`PCR ${pcr.oi.toFixed(2)}: Balanced Neutral zone`);
   }
 
-  // ── Factor 2: PCR trend ───────────────────────────────────────────────────
+  // ── Factor 2: PCR trend (ΔPCR Velocity) ───────────────────────────────────
   if (pcr.oiChange > 0.05) {
     bullishScore += 10;
-    reasons.push(`PCR rising +${pcr.oiChange.toFixed(2)} (bullish)`);
+    reasons.push(`ΔPCR velocity +${pcr.oiChange.toFixed(2)}: Intraday Put writing accelerating`);
   } else if (pcr.oiChange < -0.05) {
     bullishScore -= 10;
-    reasons.push(`PCR falling ${pcr.oiChange.toFixed(2)} (bearish)`);
+    reasons.push(`ΔPCR velocity ${pcr.oiChange.toFixed(2)}: Intraday Call writing accelerating`);
   }
 
-  // ── Factor 3: ATM buildups ────────────────────────────────────────────────
+  // ── Factor 3: Near-ATM Buildup Grid (Moneyness Weighted) ──────────────────
   const atmStrikes = getATMStrikes(strikes, spot, 5);
   const atmBuildups = buildups.filter((b) => atmStrikes.includes(b.strike));
 
@@ -67,25 +79,25 @@ export function computeBias(input: BiasInput): BiasScore {
     const isCE = b.optionType === 'CE';
     switch (b.kind) {
       case 'LONG_BUILDUP':
-        atmBullScore += isCE ? 2 : -2; // CE longs = bullish; PE longs = bearish
+        atmBullScore += isCE ? 3 : -3; // Fresh buyers entering
         break;
       case 'SHORT_BUILDUP':
-        atmBullScore += isCE ? -2 : 2; // CE shorts = bearish resistance; PE shorts = bullish support
+        atmBullScore += isCE ? -3 : 3; // Institutional writers building walls
         break;
       case 'SHORT_COVERING':
-        atmBullScore += isCE ? 1 : -1;
+        atmBullScore += isCE ? 1.5 : -1.5; // Short covering squeeze relief
         break;
       case 'LONG_UNWINDING':
-        atmBullScore += isCE ? -1 : 1;
+        atmBullScore += isCE ? -1.5 : 1.5; // Long liquidation / profit taking
         break;
     }
   }
 
-  const clampedAtm = Math.max(-20, Math.min(20, atmBullScore));
+  const clampedAtm = Math.max(-25, Math.min(25, Math.round(atmBullScore)));
   bullishScore += clampedAtm;
   if (atmBuildups.length > 0) {
     reasons.push(
-      `ATM buildups: ${atmBuildups.length} near ATM, net score ${atmBullScore > 0 ? '+' : ''}${atmBullScore}`
+      `ATM buildups: ${atmBuildups.length} active strikes near ATM (net score ${atmBullScore > 0 ? '+' : ''}${atmBullScore})`
     );
   }
 

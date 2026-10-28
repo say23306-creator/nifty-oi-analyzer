@@ -65,45 +65,49 @@ export interface InterpretedSignal {
 // ─── Observation strings ──────────────────────────────────────────────────────
 
 const OBSERVATION: Record<BuildupKind, string> = {
-  LONG_BUILDUP:   'Long Build Up',
-  LONG_UNWINDING: 'Long Covering',
-  SHORT_BUILDUP:  'Short Build Up',
+  LONG_BUILDUP:   'Long Buildup',
+  LONG_UNWINDING: 'Long Unwinding',
+  SHORT_BUILDUP:  'Short Buildup',
   SHORT_COVERING: 'Short Covering',
 };
 
 // ─── CE view maps ─────────────────────────────────────────────────────────────
 // For Call Options: Option view === Stock/Equity view
+// Fresh Buildup (OI expansion) represents high-conviction primary trends.
+// Covering/Unwinding (OI contraction) represents position squaring / tactical relief.
 
 const CE_OPTION_VIEW: Record<BuildupKind, ViewLabel> = {
-  LONG_BUILDUP:   'BULLISH',
-  LONG_UNWINDING: 'STRONG_BEARISH',
-  SHORT_BUILDUP:  'BEARISH',
-  SHORT_COVERING: 'STRONG_BULLISH',
+  LONG_BUILDUP:   'STRONG_BULLISH',
+  LONG_UNWINDING: 'BEARISH',
+  SHORT_BUILDUP:  'STRONG_BEARISH',
+  SHORT_COVERING: 'BULLISH',
 };
 
 const CE_EQUITY_VIEW: Record<BuildupKind, ViewLabel> = {
-  LONG_BUILDUP:   'BULLISH',
-  LONG_UNWINDING: 'STRONG_BEARISH',
-  SHORT_BUILDUP:  'BEARISH',
-  SHORT_COVERING: 'STRONG_BULLISH',
+  LONG_BUILDUP:   'STRONG_BULLISH',
+  LONG_UNWINDING: 'BEARISH',
+  SHORT_BUILDUP:  'STRONG_BEARISH',
+  SHORT_COVERING: 'BULLISH',
 };
 
 // ─── PE view maps ─────────────────────────────────────────────────────────────
 // For Put Options: Stock/Equity view is INVERTED relative to Option view
+// Put writers (Short Buildup) form institutional floors -> Strong Bullish for Equity
+// Put buyers (Long Buildup) anticipate drops -> Strong Bearish for Equity
 
 const PE_OPTION_VIEW: Record<BuildupKind, ViewLabel> = {
-  LONG_BUILDUP:   'BULLISH',
-  LONG_UNWINDING: 'STRONG_BEARISH',
-  SHORT_BUILDUP:  'BEARISH',
-  SHORT_COVERING: 'STRONG_BULLISH',
+  LONG_BUILDUP:   'STRONG_BULLISH',
+  LONG_UNWINDING: 'BEARISH',
+  SHORT_BUILDUP:  'STRONG_BEARISH',
+  SHORT_COVERING: 'BULLISH',
 };
 
 const PE_EQUITY_VIEW: Record<BuildupKind, ViewLabel> = {
   // Put buyers are net bearish on Nifty -> equity view inverts
-  LONG_BUILDUP:   'BEARISH',         // Put longs building up  = Nifty bearish
-  LONG_UNWINDING: 'STRONG_BULLISH',  // Put longs exiting      = bearish pressure easing
-  SHORT_BUILDUP:  'BULLISH',         // Put sellers (short PE) = Nifty bullish
-  SHORT_COVERING: 'STRONG_BEARISH',  // Put shorts covering    = bullish thesis unwinding
+  LONG_BUILDUP:   'STRONG_BEARISH',  // Aggressive Put buyers = High conviction Bearish
+  LONG_UNWINDING: 'BULLISH',         // Put buyers profit-booking = Downside pressure easing
+  SHORT_BUILDUP:  'STRONG_BULLISH',  // Heavy Put writers (Smart Money) = High conviction Bullish Support
+  SHORT_COVERING: 'BEARISH',         // Put writers covering in panic = Support thesis cracking
 };
 
 // ─── Main interpreter ─────────────────────────────────────────────────────────
@@ -172,26 +176,45 @@ const EQUITY_WEIGHT: Record<ViewLabel, number> = {
   STRONG_BEARISH: -2,
 };
 
-export function aggregateEquityBias(signals: InterpretedSignal[]): AggregateEquityBias {
+export function aggregateEquityBias(
+  signals: InterpretedSignal[],
+  spot?: number
+): AggregateEquityBias {
   let net = 0;
   let strongBullish = 0, bullish = 0, bearish = 0, strongBearish = 0;
 
   for (const s of signals) {
-    net += EQUITY_WEIGHT[s.equityView];
+    let weight = 1.0;
+    if (spot && spot > 0) {
+      const distancePct = (Math.abs(s.strike - spot) / spot) * 100;
+      if (distancePct > 4.0) {
+        weight = 0.25; // Far OTM retail speculation / tail hedges
+      } else if (distancePct > 2.0) {
+        weight = 0.60; // Secondary outer strikes
+      } else {
+        weight = 1.00; // Active battleground near ATM
+      }
+    }
+
+    const contribution = EQUITY_WEIGHT[s.equityView] * weight;
+    net += contribution;
+
     if (s.equityView === 'STRONG_BULLISH') strongBullish++;
     else if (s.equityView === 'BULLISH')   bullish++;
     else if (s.equityView === 'BEARISH')   bearish++;
     else if (s.equityView === 'STRONG_BEARISH') strongBearish++;
   }
 
-  let label: ViewLabel | 'NEUTRAL';
-  if (net >= 4)       label = 'STRONG_BULLISH';
-  else if (net >= 1)  label = 'BULLISH';
-  else if (net <= -4) label = 'STRONG_BEARISH';
-  else if (net <= -1) label = 'BEARISH';
-  else                label = 'NEUTRAL';
+  const roundedNet = Math.round(net);
 
-  return { netBullishScore: net, total: signals.length, strongBullish, bullish, bearish, strongBearish, label };
+  let label: ViewLabel | 'NEUTRAL';
+  if (roundedNet >= 4)       label = 'STRONG_BULLISH';
+  else if (roundedNet >= 1)  label = 'BULLISH';
+  else if (roundedNet <= -4) label = 'STRONG_BEARISH';
+  else if (roundedNet <= -1) label = 'BEARISH';
+  else                       label = 'NEUTRAL';
+
+  return { netBullishScore: roundedNet, total: signals.length, strongBullish, bullish, bearish, strongBearish, label };
 }
 
 // ─── Display helpers ──────────────────────────────────────────────────────────

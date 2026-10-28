@@ -137,16 +137,16 @@ def generate_report_from_data(data: dict, checkpoint_title: str) -> str:
         f"• 🟢 Major Support (Put Floor): <b>{support}</b> ({format_indian_oi(sup_oi)} PE OI)",
     ])
 
-    # Trapped Sellers
+    # Trapped Sellers (Verified past Strike/Breakeven with active panic unwinding)
     trapped = []
     for r in chain:
         s = r.get("strike", 0)
-        c_oi = r.get("ce_oi", 0)
-        p_oi = r.get("pe_oi", 0)
-        if spot > s + 25 and c_oi > 80000:
-            trapped.append(f"Call Writers trapped at <b>{s} CE</b> (Spot: {spot:.0f} &gt; {s})")
-        elif spot < s - 25 and p_oi > 80000:
-            trapped.append(f"Put Writers trapped at <b>{s} PE</b> (Spot: {spot:.0f} &lt; {s})")
+        c_chg = r.get("ce_change_oi", 0)
+        p_chg = r.get("pe_change_oi", 0)
+        if s <= spot and c_chg < -15000:
+            trapped.append(f"Call Writers trapped at <b>{s} CE</b> (Spot: {spot:.0f} &ge; {s}, ΔOI: <code>{format_indian_oi(c_chg, True)}</code> covering)")
+        elif s >= spot and p_chg < -15000:
+            trapped.append(f"Put Writers trapped at <b>{s} PE</b> (Spot: {spot:.0f} &le; {s}, ΔOI: <code>{format_indian_oi(p_chg, True)}</code> unwinding)")
 
     # Top Buildups
     notable = []
@@ -166,7 +166,25 @@ def generate_report_from_data(data: dict, checkpoint_title: str) -> str:
         lines.extend(["", "<b>🚨 NOTABLE BUILDUP MOVES:</b>"] + [item[1] for item in notable[:4]])
 
     if trapped:
-        lines.extend(["", "<b>⚡ TRAPPED SELLERS ALERT:</b>"] + [f"• ⚠️ {t}" for t in trapped[:2]])
+        lines.extend(["", "<b>⚡ TRAPPED SELLERS SQUEEZE ALERT:</b>"] + [f"• ⚠️ {t}" for t in trapped[:2]])
+
+    # Pro Trader Action & Decision Guidance
+    if pcr >= 1.60:
+        action_text = f"⚠️ <b>EXTREME OVERBOUGHT (PCR {pcr:.2f})</b> — Avoid chasing calls; prepare for mean-reversion toward {max_pain}."
+    elif pcr < 0.60:
+        action_text = f"🚀 <b>OVERSOLD SQUEEZE RADAR</b> — Call writers crowded; watch for sharp short-covering spike."
+    elif "BULL" in bias.upper():
+        action_text = f"🟢 <b>BUY DIPS NEAR {support} PUT FLOOR</b> — Target: {resistance} | Stop-Loss below {support - 40}."
+    elif "BEAR" in bias.upper():
+        action_text = f"🔴 <b>SELL RALLIES NEAR {resistance} CALL WALL</b> — Target: {support} | Stop-Loss above {resistance + 40}."
+    else:
+        action_text = f"⚖️ <b>RANGEBOUND CONSOLIDATION</b> — Play corridor [{support} – {resistance}] with Iron Condors."
+
+    lines.extend([
+        "",
+        f"<b>🎯 PRO TRADER ACTION PLAN:</b>",
+        f"• {action_text}",
+    ])
 
     lines.extend([
         "",

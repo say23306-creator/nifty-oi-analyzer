@@ -12,6 +12,47 @@ export type BuildupKind =
 
 export type BiasDirection = 'BULLISH' | 'BEARISH' | 'NEUTRAL';
 
+export type MarketRegime =
+  | 'TRENDING_BULLISH'
+  | 'TRENDING_BEARISH'
+  | 'RANGEBOUND'
+  | 'OVERBOUGHT_EXHAUSTION'
+  | 'OVERSOLD_SQUEEZE_SETUP';
+
+export type TradeAction =
+  | 'BUY_DIPS_AT_SUPPORT'
+  | 'SELL_RALLIES_AT_RESISTANCE'
+  | 'BREAKOUT_BUY_CALLS'
+  | 'BREAKDOWN_BUY_PUTS'
+  | 'IRON_CONDOR_RANGE_PLAY'
+  | 'WAIT_FOR_CONFIRMATION';
+
+export interface TrappedWriterInfo {
+  strike: number;
+  optionType: OptionType;
+  breakeven: number;
+  unwindingOI: number;
+  severity: 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  description: string;
+}
+
+export interface TradeDecision {
+  regime: MarketRegime;
+  bias: BiasDirection;
+  confidence: number;
+  action: TradeAction;
+  actionHeadline: string;
+  actionSummary: string;
+  supportWall: number;
+  resistanceWall: number;
+  invalidationLevel: number;
+  targetRange: [number, number];
+  recommendedStrategy: string;
+  strategyRationale: string;
+  decisionSteps: string[];
+  trappedAlerts: TrappedWriterInfo[];
+}
+
 export interface BuildupSignal {
   strike: number;
   optionType: OptionType;
@@ -73,6 +114,9 @@ export interface AnalysisResult {
 
   // Overall bias
   bias: BiasScore;
+
+  // Professional trade decision framework
+  decision?: TradeDecision;
 }
 
 export interface StrikeComparison {

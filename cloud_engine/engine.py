@@ -265,54 +265,109 @@ def parse_and_analyze(raw: dict) -> Dict[str, Any]:
     strikes.sort()
     max_pain = calculate_max_pain(strikes, [{"strike": r["strike"], "ce_oi": r["ce"]["oi"], "pe_oi": r["pe"]["oi"]} for r in chain_rows])
 
-    # Key Support (Top 3 Put OI) & Resistance (Top 3 Call OI)
-    sorted_by_pe_oi = sorted(chain_rows, key=lambda x: x["pe"]["oi"], reverse=True)[:3]
-    sorted_by_ce_oi = sorted(chain_rows, key=lambda x: x["ce"]["oi"], reverse=True)[:3]
+    # Key Support (Put Wall below/at spot) & Resistance (Call Wall above/at spot)
+    active_pe = [r for r in chain_rows if r["strike"] <= spot + 50]
+    active_ce = [r for r in chain_rows if r["strike"] >= spot - 50]
+
+    sorted_by_pe_oi = sorted(active_pe if active_pe else chain_rows, key=lambda x: x["pe"]["oi"], reverse=True)[:3]
+    sorted_by_ce_oi = sorted(active_ce if active_ce else chain_rows, key=lambda x: x["ce"]["oi"], reverse=True)[:3]
 
     support_levels = [{"strike": r["strike"], "oi": r["pe"]["oi"]} for r in sorted_by_pe_oi]
     resistance_levels = [{"strike": r["strike"], "oi": r["ce"]["oi"]} for r in sorted_by_ce_oi]
 
-    # Detect Trapped Institutional Sellers
+    support_wall = support_levels[0]["strike"] if support_levels else (atm_strike - 100)
+    resistance_wall = resistance_levels[0]["strike"] if resistance_levels else (atm_strike + 100)
+
+    # Detect Trapped Institutional Sellers via True Breakevens & Unwinding
     trapped = []
-    # If Spot is higher than ATM, Call writers below spot are trapped in loss
     for r in chain_rows:
         s = r["strike"]
-        # Call writer trap: Strike < Spot and CE Short Covering / Panic
-        if s < spot and r["ce"]["buildup"] in ("SHORT_COVERING", "LONG_BUILDUP") and r["ce"]["change_oi"] < -20000:
+        ce_ltp = r["ce"]["ltp"]
+        pe_ltp = r["pe"]["ltp"]
+        ce_chg = r["ce"]["change_oi"]
+        pe_chg = r["pe"]["change_oi"]
+
+        # Call writer trap: Spot >= Strike (or past breakeven Strike + Premium) with active OI panic unwinding
+        if s <= spot and ce_chg < -10000:
+            breakeven = s + ce_ltp
+            severity = "CRITICAL" if spot >= breakeven else "HIGH"
             trapped.append({
                 "strike": s,
                 "type": "CE",
-                "message": f"Trapped Call Writers panicking at {s} CE (OI shedding {abs(r['ce']['change_oi']):,})",
-                "severity": "HIGH",
+                "breakeven": round(breakeven, 1),
+                "unwinding_oi": abs(ce_chg),
+                "message": f"Trapped Call Writers panicking at {s} CE (Spot {spot:.0f} >= Strike, ΔOI {ce_chg:,}). Squeeze risk.",
+                "severity": severity,
             })
-        # Put writer trap: Strike > Spot and PE Short Covering / Panic
-        if s > spot and r["pe"]["buildup"] in ("SHORT_COVERING", "LONG_BUILDUP") and r["pe"]["change_oi"] < -20000:
+
+        # Put writer trap: Spot <= Strike (or below breakeven Strike - Premium) with active OI panic unwinding
+        if s >= spot and pe_chg < -10000:
+            breakeven = s - pe_ltp
+            severity = "CRITICAL" if spot <= breakeven else "HIGH"
             trapped.append({
                 "strike": s,
                 "type": "PE",
-                "message": f"Trapped Put Writers panicking at {s} PE (Downside threat at {s})",
-                "severity": "HIGH",
+                "breakeven": round(breakeven, 1),
+                "unwinding_oi": abs(pe_chg),
+                "message": f"Trapped Put Writers panicking at {s} PE (Spot {spot:.0f} <= Strike, ΔOI {pe_chg:,}). Downside risk.",
+                "severity": severity,
             })
 
-    # Overall Market Bias
+    # Pro-Grade 5-Zone PCR & Bias Score
     bias_score = 0
     reasons = []
 
-    if pcr > 1.2:
-        bias_score += 2
-        reasons.append(f"PCR is strongly bullish at {pcr} (Put writing dominance)")
-    elif pcr < 0.8:
-        bias_score -= 2
-        reasons.append(f"PCR is strongly bearish at {pcr} (Call writing dominance)")
-
-    if spot > max_pain:
-        bias_score += 1
-        reasons.append(f"Nifty is trading above Max Pain ({max_pain})")
-    elif spot < max_pain:
+    if pcr >= 1.60:
         bias_score -= 1
-        reasons.append(f"Nifty is trading below Max Pain ({max_pain})")
+        reasons.append(f"PCR {pcr} >= 1.60: Extreme Overbought / Complacency zone (Reversal warning)")
+    elif pcr >= 1.20:
+        bias_score += 2
+        reasons.append(f"PCR {pcr}: Bullish Put-Writing dominance")
+    elif pcr < 0.60:
+        bias_score += 1
+        reasons.append(f"PCR {pcr} < 0.60: Extreme Oversold / Short Squeeze alert (Contrarian bounce setup)")
+    elif pcr <= 0.85:
+        bias_score -= 2
+        reasons.append(f"PCR {pcr}: Bearish Call-Writing dominance")
+    else:
+        reasons.append(f"PCR {pcr}: Balanced neutral zone")
+
+    # Max Pain Gravitational Drag (Mean reversion towards pin)
+    if spot > max_pain + 150:
+        reasons.append(f"Spot {spot:.0f} is extended above Max Pain ({max_pain}) — gravitational mean-reversion drag")
+    elif spot < max_pain - 150:
+        reasons.append(f"Spot {spot:.0f} is below Max Pain ({max_pain}) — upward gravitational pull toward pin")
+
+    # Final Market Regime Determination
+    if pcr >= 1.60:
+        regime = "OVERBOUGHT_EXHAUSTION"
+    elif pcr < 0.60:
+        regime = "OVERSOLD_SQUEEZE_SETUP"
+    elif bias_score >= 1:
+        regime = "TRENDING_BULLISH"
+    elif bias_score <= -1:
+        regime = "TRENDING_BEARISH"
+    else:
+        regime = "RANGEBOUND"
 
     final_bias = "BULLISH" if bias_score >= 1 else ("BEARISH" if bias_score <= -1 else "NEUTRAL")
+
+    # Pro Trader Action & Strategy Recommendation
+    if regime == "TRENDING_BULLISH":
+        trade_action = f"BUY DIPS NEAR {support_wall} PUT FLOOR"
+        rec_strategy = f"Bull Put Credit Spread (Sell {support_wall} PE / Buy {support_wall - 100} PE)"
+    elif regime == "TRENDING_BEARISH":
+        trade_action = f"SELL RALLIES NEAR {resistance_wall} CALL WALL"
+        rec_strategy = f"Bear Call Credit Spread (Sell {resistance_wall} CE / Buy {resistance_wall + 100} CE)"
+    elif regime == "OVERBOUGHT_EXHAUSTION":
+        trade_action = "TIGHTEN LONG STOPS / CASH OUT CALLS"
+        rec_strategy = "Bear Call Spread or Wait for Pullback to Support"
+    elif regime == "OVERSOLD_SQUEEZE_SETUP":
+        trade_action = "WATCH FOR SHORT SQUEEZE BREAKOUT"
+        rec_strategy = "Long Call Breakout on confirmation"
+    else:
+        trade_action = f"PLAY RANGE {support_wall} - {resistance_wall}"
+        rec_strategy = f"Iron Condor (Sell {resistance_wall} CE & Sell {support_wall} PE)"
 
     return {
         "available": True,
@@ -325,6 +380,11 @@ def parse_and_analyze(raw: dict) -> Dict[str, Any]:
         "bias": final_bias,
         "bias_score": bias_score,
         "bias_reasons": reasons,
+        "regime": regime,
+        "trade_action": trade_action,
+        "recommended_strategy": rec_strategy,
+        "support_wall": support_wall,
+        "resistance_wall": resistance_wall,
         "support": support_levels,
         "resistance": resistance_levels,
         "trapped_writers": trapped,
