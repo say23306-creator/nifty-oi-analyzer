@@ -54,11 +54,11 @@ export function computeBias(input: BiasInput): BiasScore {
   } else if (pcr.oi < 0.60) {
     bullishScore += 5;
     reasons.push(`PCR ${pcr.oi.toFixed(2)} < 0.60: Extreme Oversold / Short Squeeze alert (Contrarian bounce setup)`);
-  } else if (pcr.oi <= 0.85) {
+  } else if (pcr.oi <= 0.80) {
     bullishScore -= 15;
-    reasons.push(`PCR ${pcr.oi.toFixed(2)}: Bearish Call-Writing dominance`);
+    reasons.push(`PCR ${pcr.oi.toFixed(2)}: Bearish Call-Writing dominance (≤0.80)`);
   } else {
-    reasons.push(`PCR ${pcr.oi.toFixed(2)}: Balanced Neutral zone`);
+    reasons.push(`PCR ${pcr.oi.toFixed(2)}: Balanced Neutral zone (0.80 - 1.20)`);
   }
 
   // ── Factor 2: PCR trend (ΔPCR Velocity) ───────────────────────────────────

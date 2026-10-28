@@ -9,6 +9,7 @@ import fs from 'fs';
 import path from 'path';
 import type { DbChainRow, DbSignal } from '@/lib/db/queries';
 import type { AnalysisResult, BiasDirection, BuildupSignal, OILevel } from '@/lib/analysis/types';
+import { computeBias } from '@/lib/analysis/bias';
 import { generateTradeDecision } from '@/lib/analysis/decision-engine';
 import { isMarketOpen, nowIST } from '@/lib/market/hours';
 
@@ -190,42 +191,36 @@ export function buildAnalysisFromScraped(scraped: ScrapedDataPayload): AnalysisR
     type: 'CE',
   };
 
-  const isOverbought = scraped.pcr >= 1.60;
-  const isOversold = scraped.pcr < 0.60;
-  const isBullish = scraped.pcr >= 1.20 && !isOverbought;
-  const isBearish = scraped.pcr <= 0.85 && !isOversold;
+  const strikes = [...new Set(scraped.chain.map((r) => r.strike))].sort((a, b) => a - b);
+  const pcrData = {
+    oi: scraped.pcr,
+    volume: scraped.pcr_volume,
+    oiChange: 0.01,
+    totalCeOI: scraped.total_ce_oi,
+    totalPeOI: scraped.total_pe_oi,
+    totalCeVolume: scraped.total_ce_volume,
+    totalPeVolume: scraped.total_pe_volume,
+  };
 
-  const direction: BiasDirection = isOverbought ? 'NEUTRAL' : isOversold ? 'BULLISH' : isBullish ? 'BULLISH' : isBearish ? 'BEARISH' : 'NEUTRAL';
-  const confidence = isOverbought ? 75 : isOversold ? 70 : isBullish ? Math.min(95, Math.round(scraped.pcr * 65)) : isBearish ? 80 : 60;
+  const bias = computeBias({
+    spot: scraped.spot,
+    prevSpot: scraped.spot,
+    pcr: pcrData,
+    buildups: allBuildups,
+    support: [supportLevel],
+    resistance: [resistanceLevel],
+    strikes,
+  });
 
-  const reasons = [
-    isOverbought
-      ? `PCR (OI) is ${scraped.pcr.toFixed(3)} ≥ 1.60: Extreme Overbought / Complacency zone (Reversal warning).`
-      : isOversold
-      ? `PCR (OI) is ${scraped.pcr.toFixed(3)} < 0.60: Extreme Oversold / Short Squeeze setup alert.`
-      : `PCR (OI) is ${scraped.pcr.toFixed(3)}, indicating ${isBullish ? 'Put writing dominance (Bullish support)' : 'Call writing resistance'}.`,
+  bias.reasons.push(
     `Active Put Floor (Support) established at ${scraped.support.toLocaleString('en-IN')} (${(supportLevel.oi / 100000).toFixed(1)}L Put OI).`,
     `Active Call Wall (Resistance) concentrated at ${scraped.resistance.toLocaleString('en-IN')} (${(resistanceLevel.oi / 100000).toFixed(1)}L Call OI).`,
-    `Max Pain expiry gravitational anchor is positioned at ${scraped.max_pain.toLocaleString('en-IN')}.`,
-  ];
-
-  const bias = {
-    direction,
-    confidence,
-    reasons,
-  };
+    `Max Pain expiry gravitational anchor is positioned at ${scraped.max_pain.toLocaleString('en-IN')}.`
+  );
 
   const decision = generateTradeDecision({
     spot: scraped.spot,
-    pcr: {
-      oi: scraped.pcr,
-      volume: scraped.pcr_volume,
-      oiChange: 0.05,
-      totalCeOI: scraped.total_ce_oi,
-      totalPeOI: scraped.total_pe_oi,
-      totalCeVolume: scraped.total_ce_volume,
-      totalPeVolume: scraped.total_pe_volume,
-    },
+    pcr: pcrData,
     bias,
     support: [supportLevel],
     resistance: [resistanceLevel],

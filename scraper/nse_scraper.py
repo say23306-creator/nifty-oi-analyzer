@@ -205,7 +205,7 @@ def compute_max_pain(rows: List[Dict[str, Any]]) -> float:
 
         if total_loss < min_loss:
             min_loss = total_loss
-            max_pain_strike = strike
+            max_pain_strike = test_strike
 
     return max_pain_strike
 

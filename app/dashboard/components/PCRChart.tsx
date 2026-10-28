@@ -54,11 +54,15 @@ export default function PCRChart({ history }: PCRChartProps) {
 
   const latestPCR = chartData[chartData.length - 1]?.pcr ?? 0;
   const pcrStatus =
-    latestPCR >= 1.2
-      ? { label: 'Bullish (>1.2)', color: 'text-emerald-400' }
+    latestPCR >= 1.6
+      ? { label: 'Extr. Overbought (≥1.6)', color: 'text-amber-400' }
+      : latestPCR >= 1.2
+      ? { label: 'Bullish (1.2 - 1.6)', color: 'text-emerald-400' }
+      : latestPCR < 0.6
+      ? { label: 'Extr. Oversold (<0.6)', color: 'text-cyan-400' }
       : latestPCR <= 0.8
-      ? { label: 'Bearish (<0.8)', color: 'text-rose-400' }
-      : { label: 'Neutral (0.8 - 1.2)', color: 'text-amber-400' };
+      ? { label: 'Bearish (0.6 - 0.8)', color: 'text-rose-400' }
+      : { label: 'Neutral (0.8 - 1.2)', color: 'text-slate-300' };
 
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 shadow-xl backdrop-blur-sm">
