@@ -7,7 +7,9 @@ import { logger } from '../utils/logger';
 import {
   getLatestSnapshot,
   getSnapshotNMinutesAgo,
+  getRecentSnapshots,
   getChainRows,
+  type DbSnapshot,
 } from '../db/queries';
 import { buildComparisons, classifyAllBuildups, sortByOIChange } from './buildup';
 import { computePCR, computeMaxPain, computeSupportResistance } from './aggregates';
@@ -18,7 +20,10 @@ import type { AnalysisResult } from './types';
  * Run the full analysis engine for a given expiry.
  * Returns null if there are not enough snapshots to compare.
  */
-export async function runAnalysis(expiry: string): Promise<AnalysisResult | null> {
+export async function runAnalysis(
+  expiry: string,
+  windowMinutes?: number
+): Promise<AnalysisResult | null> {
   // ── Get current snapshot ──────────────────────────────────────────────────
   const curr = await getLatestSnapshot(expiry);
   if (!curr) {
@@ -26,8 +31,18 @@ export async function runAnalysis(expiry: string): Promise<AnalysisResult | null
     return null;
   }
 
-  // ── Get comparison snapshot (N minutes ago) ───────────────────────────────
-  const prev = await getSnapshotNMinutesAgo(expiry, config.analysis.windowMinutes);
+  // ── Get comparison snapshot (N minutes ago, defaults to 60 for 1-hr change) ─
+  const effectiveWindow = windowMinutes ?? config.analysis.windowMinutes;
+  let prev = await getSnapshotNMinutesAgo(expiry, effectiveWindow);
+
+  // Fallback to previous snapshot if window hasn't elapsed yet
+  if (!prev) {
+    const recent = await getRecentSnapshots(5, expiry);
+    if (recent.length > 1) {
+      // Pick earlier snapshot that isn't current
+      prev = recent.find((s: DbSnapshot) => s.id !== curr.id) ?? null;
+    }
+  }
 
   // ── Fetch chain rows ──────────────────────────────────────────────────────
   const currRows = await getChainRows(curr.id);
@@ -37,7 +52,7 @@ export async function runAnalysis(expiry: string): Promise<AnalysisResult | null
     prevRows = await getChainRows(prev.id);
   }
 
-  logger.info(`[analysis] curr snapshot ${curr.id} (${currRows.length} rows), prev ${prev?.id ?? 'none'} (${prevRows.length} rows)`);
+  logger.info(`[analysis] curr snapshot ${curr.id} (${currRows.length} rows), prev ${prev?.id ?? 'none'} (${prevRows.length} rows, window: ${effectiveWindow}m)`);
 
   // ── Buildups ──────────────────────────────────────────────────────────────
   const comparisons = buildComparisons(

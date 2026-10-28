@@ -155,11 +155,10 @@ export default function ChainTable({
             <button
               key={r}
               onClick={() => setStrikeRange(r)}
-              className={`px-2.5 py-1 rounded text-xs font-medium transition cursor-pointer ${
-                strikeRange === r
+              className={`px-2.5 py-1 rounded text-xs font-medium transition cursor-pointer ${strikeRange === r
                   ? 'bg-cyan-500 text-slate-950 font-bold shadow-sm'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-              }`}
+                }`}
             >
               {r === 0 ? 'All' : `±${r}`}
             </button>
@@ -244,13 +243,12 @@ export default function ChainTable({
 
                   {/* Strike Column */}
                   <td
-                    className={`py-2 px-4 text-center font-bold border-x border-slate-800/90 ${
-                      isATM
+                    className={`py-2 px-4 text-center font-bold border-x border-slate-800/90 ${isATM
                         ? 'bg-cyan-500/20 text-cyan-200 ring-1 ring-cyan-400/50'
                         : isMaxPain
-                        ? 'bg-indigo-500/20 text-indigo-200'
-                        : 'bg-slate-950/70 text-white'
-                    }`}
+                          ? 'bg-indigo-500/20 text-indigo-200'
+                          : 'bg-slate-950/70 text-white'
+                      }`}
                   >
                     <div className="flex items-center justify-center gap-1.5">
                       <span>{strike}</span>
