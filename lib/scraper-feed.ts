@@ -8,7 +8,7 @@
 import fs from 'fs';
 import path from 'path';
 import type { DbChainRow, DbSignal } from '@/lib/db/queries';
-import type { AnalysisResult, BuildupSignal, OILevel } from '@/lib/analysis/types';
+import type { AnalysisResult, BiasDirection, BuildupSignal, OILevel } from '@/lib/analysis/types';
 import { generateTradeDecision } from '@/lib/analysis/decision-engine';
 import { isMarketOpen, nowIST } from '@/lib/market/hours';
 
@@ -195,7 +195,7 @@ export function buildAnalysisFromScraped(scraped: ScrapedDataPayload): AnalysisR
   const isBullish = scraped.pcr >= 1.20 && !isOverbought;
   const isBearish = scraped.pcr <= 0.85 && !isOversold;
 
-  const direction = isOverbought ? 'NEUTRAL' : isOversold ? 'BULLISH' : isBullish ? 'BULLISH' : isBearish ? 'BEARISH' : 'NEUTRAL';
+  const direction: BiasDirection = isOverbought ? 'NEUTRAL' : isOversold ? 'BULLISH' : isBullish ? 'BULLISH' : isBearish ? 'BEARISH' : 'NEUTRAL';
   const confidence = isOverbought ? 75 : isOversold ? 70 : isBullish ? Math.min(95, Math.round(scraped.pcr * 65)) : isBearish ? 80 : 60;
 
   const reasons = [
