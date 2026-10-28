@@ -2,27 +2,31 @@ name: Nifty Market Hours Cloud Scheduler
 
 on:
   schedule:
-    # Runs every 5 minutes from 03:45 UTC to 10:00 UTC, Mon-Fri (IST: 09:15 AM to 03:30 PM)
+    # 1. High-frequency collector: Every 5 minutes from 09:15 AM to 03:30 PM IST (03:45 to 10:00 UTC) Mon-Fri
     - cron: '*/5 3-10 * * 1-5'
-  workflow_dispatch: # Allows manual trigger from GitHub UI anytime
+    # 2. Hourly OI Analysis & Telegram Broadcast: 09:15, 10:15, 11:15, 12:15, 13:15, 14:15, 15:15 IST
+    - cron: '45 3,4,5,6,7,8,9 * * 1-5'
+  workflow_dispatch: # Allows manual trigger anytime from GitHub UI or webhook
 
 jobs:
   collect-data:
+    name: 5-Min Data Collector & Signal Check
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Live Market Data Collection & AI Trap Analysis
         run: |
-          echo "Pinging Vercel Production API..."
+          echo "Pinging Vercel Production API (/api/collect)..."
           RESPONSE=$(curl -s -X GET "https://nifty-oi-analyzer-seven.vercel.app/api/collect" \
             -H "Authorization: Bearer oi_analyzer_cron_secret_key_2026")
           echo "Response: $RESPONSE"
 
-  hourly-ai-report:
+  hourly-oi-analysis:
+    name: Hourly Telegram Institutional OI Broadcast
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
     steps:
-      - name: Trigger Deep AI Institutional Report
+      - name: Broadcast Hourly OI Analysis & Trapped Sellers Report
         run: |
-          curl -s -X POST "https://nifty-oi-analyzer-seven.vercel.app/api/ai-analysis" \
-            -H "Content-Type: application/json" \
-            -d '{"broadcastTelegram": true}'
+          echo "Triggering Hourly Institutional OI Analysis for Telegram (/api/cron/hourly-analysis)..."
+          RESPONSE=$(curl -s -X GET "https://nifty-oi-analyzer-seven.vercel.app/api/cron/hourly-analysis?force=true" \
+            -H "Authorization: Bearer oi_analyzer_cron_secret_key_2026")
+          echo "Response: $RESPONSE"

@@ -138,11 +138,10 @@ export default function DashboardPage() {
           {/* Live Status Pill */}
           <div className="flex items-center gap-2">
             <span
-              className={`w-2.5 h-2.5 rounded-full ${
-                market?.isOpen
+              className={`w-2.5 h-2.5 rounded-full ${market?.isOpen
                   ? 'bg-emerald-500 animate-pulse shadow-sm shadow-emerald-500/50'
                   : 'bg-slate-600'
-              }`}
+                }`}
             />
             <span className="font-mono font-bold uppercase tracking-wider text-slate-300 text-[11px]">
               {market?.isOpen ? 'Live' : 'Closed'}
@@ -173,9 +172,8 @@ export default function DashboardPage() {
               <div className="px-2.5 py-1 rounded-md bg-slate-950 border border-slate-800 flex items-center gap-1.5">
                 <span className="text-slate-500">PCR:</span>
                 <span
-                  className={`font-bold ${
-                    pcrValue >= 1.0 ? 'text-emerald-400' : 'text-rose-400'
-                  }`}
+                  className={`font-bold ${pcrValue >= 1.0 ? 'text-emerald-400' : 'text-rose-400'
+                    }`}
                 >
                   {pcrValue.toFixed(2)}
                 </span>
@@ -189,13 +187,12 @@ export default function DashboardPage() {
 
               {/* Market Bias */}
               <div
-                className={`px-2.5 py-1 rounded-md border flex items-center gap-1.5 font-bold ${
-                  biasDir === 'BULLISH'
+                className={`px-2.5 py-1 rounded-md border flex items-center gap-1.5 font-bold ${biasDir === 'BULLISH'
                     ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
                     : biasDir === 'BEARISH'
-                    ? 'bg-rose-500/10 border-rose-500/30 text-rose-400'
-                    : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
-                }`}
+                      ? 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                      : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                  }`}
               >
                 <span>{biasDir === 'BULLISH' ? '▲' : biasDir === 'BEARISH' ? '▼' : '◆'}</span>
                 <span>{biasDir}</span>
@@ -230,11 +227,10 @@ export default function DashboardPage() {
 
           <button
             onClick={() => setAutoRefresh(!autoRefresh)}
-            className={`px-2.5 py-1 rounded-md border transition cursor-pointer text-[11px] font-bold ${
-              autoRefresh
+            className={`px-2.5 py-1 rounded-md border transition cursor-pointer text-[11px] font-bold ${autoRefresh
                 ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-300'
                 : 'bg-slate-800 border-slate-700 text-slate-400'
-            }`}
+              }`}
             title="Toggle 30-sec live auto-refresh"
           >
             Auto: {autoRefresh ? 'ON' : 'OFF'}
@@ -271,11 +267,10 @@ export default function DashboardPage() {
           {/* Tab 1: Options Screener */}
           <button
             onClick={() => handleTabChange('screener')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-2 ${
-              activeTab === 'screener'
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-2 ${activeTab === 'screener'
                 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900 border border-transparent'
-            }`}
+              }`}
           >
             <span>🔍</span>
             <span>Options Screener</span>
@@ -284,11 +279,10 @@ export default function DashboardPage() {
           {/* Tab 2: Deep Option Chain Table */}
           <button
             onClick={() => handleTabChange('chain')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-2 ${
-              activeTab === 'chain'
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-2 ${activeTab === 'chain'
                 ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900 border border-transparent'
-            }`}
+              }`}
           >
             <span>📊</span>
             <span>Option Chain Heatmap</span>
@@ -297,11 +291,10 @@ export default function DashboardPage() {
           {/* Tab 3: Charts & Trends */}
           <button
             onClick={() => handleTabChange('charts')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-2 ${
-              activeTab === 'charts'
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-2 ${activeTab === 'charts'
                 ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 shadow-sm'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900 border border-transparent'
-            }`}
+              }`}
           >
             <span>📈</span>
             <span>Charts & Distribution</span>
@@ -310,11 +303,10 @@ export default function DashboardPage() {
           {/* Tab 4: AI Institutional Intelligence */}
           <button
             onClick={() => handleTabChange('ai')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-2 ${
-              activeTab === 'ai'
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-2 ${activeTab === 'ai'
                 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900 border border-transparent'
-            }`}
+              }`}
           >
             <span>🤖</span>
             <span>AI Intelligence</span>

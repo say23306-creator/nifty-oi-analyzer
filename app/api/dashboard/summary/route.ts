@@ -19,14 +19,17 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(): Promise<NextResponse> {
+export async function GET(request: Request): Promise<NextResponse> {
+  const { searchParams } = new URL(request.url);
+  const windowMinutes = parseInt(searchParams.get('window') ?? '60', 10);
+
   // 1. Try DB first if DATABASE_URL is set
   if (process.env.DATABASE_URL) {
     try {
       const snap = await getLatestSnapshot();
       if (snap) {
         const [analysis, paperSummary, recentSnaps] = await Promise.all([
-          runAnalysis(snap.expiry),
+          runAnalysis(snap.expiry, windowMinutes),
           getPaperTradeSummary(),
           getRecentSnapshots(30, snap.expiry),
         ]);
