@@ -174,6 +174,11 @@ export default function OptionChainPage() {
           {/* Underlying Index & Timestamp */}
           <div className="flex flex-wrap items-center justify-between gap-2 pb-2">
             <div className="flex items-center gap-2 flex-wrap">
+              <img
+                src="/logo.png"
+                alt="Price to OI Logo"
+                className="w-6 h-6 rounded-full object-cover border border-[#2b2259]/20 shadow-xs"
+              />
               <span className="text-[#333333] font-normal">Underlying Index :</span>
               <span className="font-bold text-[#111111] text-[13px]">
                 {selectedSymbol} {formatIndianNumber(spot, 2)}
