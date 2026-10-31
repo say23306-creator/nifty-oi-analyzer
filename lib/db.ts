@@ -1,12 +1,28 @@
 import postgres from 'postgres';
 
-// Initialize postgres client using DATABASE_URL
-const connectionString = process.env.DATABASE_URL || '';
+// Initialize postgres client using DATABASE_URL with IPv4 Supabase pooler compatibility
+function getNormalizedDbUrl(): string {
+  let url = process.env.DATABASE_URL || '';
+  // If using direct Supabase hostname which is IPv6-only, automatically map to IPv4 pooler
+  if (url.includes('db.szyjzmqxvpjkygqikyii.supabase.co:5432')) {
+    url = url.replace(
+      'postgresql://postgres:',
+      'postgresql://postgres.szyjzmqxvpjkygqikyii:'
+    ).replace(
+      'db.szyjzmqxvpjkygqikyii.supabase.co:5432',
+      'aws-0-ap-south-1.pooler.supabase.com:6543'
+    );
+  }
+  return url;
+}
+
+const connectionString = getNormalizedDbUrl();
 
 export const sql = postgres(connectionString, {
   ssl: 'require',
-  max: 10,
-  idle_timeout: 20,
+  prepare: false, // Required for transaction pooler / pgbouncer
+  max: 5,
+  idle_timeout: 15,
   connect_timeout: 10,
 });
 
@@ -191,8 +207,8 @@ export async function fetchOptionChainFromDb(selectedExpiry?: string): Promise<O
       resistanceWall,
       rows,
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching option chain from database:', error);
-    return null;
+    throw error;
   }
 }
