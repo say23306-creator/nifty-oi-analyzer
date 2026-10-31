@@ -82,3 +82,23 @@ def send_hourly_store_alert(result: dict) -> bool:
         logger.warning(f"Telegram notification warning: {e}")
         return False
 
+
+def send_telegram_alert(text: str) -> bool:
+    """Sends a generic text alert to Telegram."""
+    token, chat_id = get_telegram_creds()
+    if not token or not chat_id:
+        return False
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "disable_web_page_preview": True,
+    }
+    try:
+        resp = requests.post(url, json=payload, timeout=8)
+        return resp.status_code == 200
+    except Exception as e:
+        logger.warning(f"Telegram notification warning: {e}")
+        return False
+
+
