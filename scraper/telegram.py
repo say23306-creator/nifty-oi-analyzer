@@ -81,3 +81,4 @@ def send_hourly_store_alert(result: dict) -> bool:
     except Exception as e:
         logger.warning(f"Telegram notification warning: {e}")
         return False
+

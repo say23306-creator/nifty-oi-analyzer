@@ -49,3 +49,4 @@ def is_market_open(dt: datetime = None) -> bool:
     minute_of_day = now.hour * 60 + now.minute
     # 09:15 = 555 minutes; 15:30 = 930 minutes
     return 555 <= minute_of_day <= 930
+

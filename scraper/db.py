@@ -161,3 +161,4 @@ def get_snapshots_for_day(date_str: str) -> List[Dict[str, Any]]:
             return [dict(r) for r in cur.fetchall()]
     finally:
         conn.close()
+

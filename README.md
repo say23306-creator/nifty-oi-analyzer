@@ -69,3 +69,4 @@ To let it run autonomously in the background across all market days:
 python scraper/scheduler.py
 ```
 *(The daemon sleeps automatically outside market hours, wakes up on trading days, checks for any missed hours, and triggers strictly at 09:15, 10:15, 11:15, 12:15, 13:15, 14:15, 15:15, 15:30 IST).*
+
