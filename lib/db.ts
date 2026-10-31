@@ -51,6 +51,10 @@ export interface PairedStrikeRow {
     iv: number;
     ltp: number;
     price_change: number;
+    bid_qty: number;
+    bid_price: number;
+    ask_price: number;
+    ask_qty: number;
   };
   pe: {
     oi: number;
@@ -60,6 +64,10 @@ export interface PairedStrikeRow {
     iv: number;
     ltp: number;
     price_change: number;
+    bid_qty: number;
+    bid_price: number;
+    ask_price: number;
+    ask_qty: number;
   };
 }
 
@@ -122,7 +130,8 @@ export async function fetchOptionChainFromDb(selectedExpiry?: string): Promise<O
 
     // 3. Fetch all chain rows for this snapshot
     const chainRows = await sql`
-      SELECT strike, type, ltp, oi, volume, iv, change_oi, pchange_oi, price_change
+      SELECT strike, type, ltp, oi, volume, iv, change_oi, pchange_oi, price_change,
+             bid_qty, bid_price, ask_price, ask_qty
       FROM chain_rows
       WHERE snapshot_id = ${snapshotId}
       ORDER BY strike ASC;
@@ -145,8 +154,8 @@ export async function fetchOptionChainFromDb(selectedExpiry?: string): Promise<O
           isATM: false,
           isITMCall: s < spot,
           isITMPut: s > spot,
-          ce: { oi: 0, change_oi: 0, pchange_oi: 0, volume: 0, iv: 0, ltp: 0, price_change: 0 },
-          pe: { oi: 0, change_oi: 0, pchange_oi: 0, volume: 0, iv: 0, ltp: 0, price_change: 0 },
+          ce: { oi: 0, change_oi: 0, pchange_oi: 0, volume: 0, iv: 0, ltp: 0, price_change: 0, bid_qty: 0, bid_price: 0, ask_price: 0, ask_qty: 0 },
+          pe: { oi: 0, change_oi: 0, pchange_oi: 0, volume: 0, iv: 0, ltp: 0, price_change: 0, bid_qty: 0, bid_price: 0, ask_price: 0, ask_qty: 0 },
         });
 
         const dist = Math.abs(s - spot);
@@ -167,6 +176,10 @@ export async function fetchOptionChainFromDb(selectedExpiry?: string): Promise<O
       target.iv = Number(r.iv) || 0;
       target.ltp = Number(r.ltp) || 0;
       target.price_change = Number(r.price_change) || 0;
+      target.bid_qty = Number(r.bid_qty) || 0;
+      target.bid_price = Number(r.bid_price) || 0;
+      target.ask_price = Number(r.ask_price) || 0;
+      target.ask_qty = Number(r.ask_qty) || 0;
     }
 
     if (strikeMap.has(closestStrike)) {

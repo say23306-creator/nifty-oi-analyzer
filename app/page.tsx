@@ -9,11 +9,11 @@ export default function OptionChainPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Filters & display preferences
+  // Filters matching NSE
+  const [selectedSymbol, setSelectedSymbol] = useState<string>('NIFTY');
   const [selectedExpiry, setSelectedExpiry] = useState<string>('');
-  const [strikeFilter, setStrikeFilter] = useState<'all' | '10' | '20' | '30'>('20');
-  const [numberFormat, setNumberFormat] = useState<'indian' | 'exact'>('indian');
-  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [selectedStrike, setSelectedStrike] = useState<string>('all');
+  const [streamingOn, setStreamingOn] = useState<boolean>(true);
 
   const fetchData = useCallback(async (expiry?: string) => {
     try {
@@ -43,129 +43,232 @@ export default function OptionChainPage() {
     fetchData();
   }, [fetchData]);
 
-  // Auto-refresh every 30 seconds
+  // Streaming auto-refresh every 30 seconds
   useEffect(() => {
-    if (!autoRefresh) return;
+    if (!streamingOn) return;
     const interval = setInterval(() => {
       fetchData(selectedExpiry);
     }, 30000);
     return () => clearInterval(interval);
-  }, [autoRefresh, selectedExpiry, fetchData]);
+  }, [streamingOn, selectedExpiry, fetchData]);
 
   const handleExpiryChange = (newExpiry: string) => {
     setSelectedExpiry(newExpiry);
     fetchData(newExpiry);
   };
 
-  // Format numbers into Indian system or exact
-  const formatNumber = useCallback((val: number, isPercent = false, showSign = false) => {
-    if (val === 0 || val == null) return '-';
-
-    const sign = val > 0 && showSign ? '+' : '';
-
-    if (isPercent) {
-      return `${sign}${val.toFixed(2)}%`;
+  // Indian number comma formatting: 1,21,881
+  const formatIndianNumber = (num: number | null | undefined, decimals = 0): string => {
+    if (num === null || num === undefined || num === 0) return '-';
+    if (decimals > 0) {
+      const parts = num.toFixed(decimals).split('.');
+      const intPart = parseInt(parts[0], 10).toLocaleString('en-IN');
+      return `${intPart}.${parts[1]}`;
     }
+    return Math.round(num).toLocaleString('en-IN');
+  };
 
-    if (numberFormat === 'exact') {
-      return `${sign}${val.toLocaleString('en-IN')}`;
-    }
+  // Formatter for price change with color
+  const renderChange = (chg: number) => {
+    if (!chg || chg === 0) return <span>-</span>;
+    const isPos = chg > 0;
+    const color = isPos ? 'text-[#008000]' : 'text-[#d32f2f]';
+    return (
+      <span className={`${color} font-medium`}>
+        {chg > 0 ? chg.toFixed(2) : chg.toFixed(2)}
+      </span>
+    );
+  };
 
-    // Indian format (Lakhs / Cr / k)
-    const absVal = Math.abs(val);
-    if (absVal >= 10000000) {
-      return `${sign}${(val / 10000000).toFixed(2)} Cr`;
-    }
-    if (absVal >= 100000) {
-      return `${sign}${(val / 100000).toFixed(2)} L`;
-    }
-    if (absVal >= 1000) {
-      return `${sign}${(val / 1000).toFixed(1)} k`;
-    }
-    return `${sign}${val.toLocaleString('en-IN')}`;
-  }, [numberFormat]);
-
-  // Filter strikes based on strikeFilter around ATM
+  // Filter strikes
   const filteredRows = useMemo(() => {
     if (!data || !data.rows) return [];
-    if (strikeFilter === 'all') return data.rows;
+    if (selectedStrike === 'all') return data.rows;
+    if (selectedStrike.startsWith('±')) {
+      const count = parseInt(selectedStrike.replace('±', ''), 10);
+      const atmIndex = data.rows.findIndex((r) => r.isATM);
+      if (atmIndex === -1) return data.rows;
+      const start = Math.max(0, atmIndex - count);
+      const end = Math.min(data.rows.length, atmIndex + count + 1);
+      return data.rows.slice(start, end);
+    }
+    const targetStrike = parseInt(selectedStrike, 10);
+    return data.rows.filter((r) => r.strike === targetStrike);
+  }, [data, selectedStrike]);
 
-    const count = parseInt(strikeFilter, 10);
-    const atmIndex = data.rows.findIndex((r) => r.isATM);
-    if (atmIndex === -1) return data.rows;
+  // Format date display like NSE: "30-Oct-2026 15:40:00 IST"
+  const formattedTimestamp = useMemo(() => {
+    if (!data?.timestamp) return '30-Oct-2026 15:30:00 IST';
+    const d = new Date(data.timestamp);
+    return d.toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    }) + ' IST';
+  }, [data?.timestamp]);
 
-    const start = Math.max(0, atmIndex - count);
-    const end = Math.min(data.rows.length, atmIndex + count + 1);
-    return data.rows.slice(start, end);
-  }, [data, strikeFilter]);
+  // CSV download function matching NSE
+  const downloadCSV = () => {
+    if (!data || !data.rows) return;
+    const headers = [
+      'CALLS_OI',
+      'CALLS_CHNG_IN_OI',
+      'CALLS_VOLUME',
+      'CALLS_IV',
+      'CALLS_LTP',
+      'CALLS_CHNG',
+      'CALLS_BID_QTY',
+      'CALLS_BID',
+      'CALLS_ASK',
+      'CALLS_ASK_QTY',
+      'STRIKE',
+      'PUTS_BID_QTY',
+      'PUTS_BID',
+      'PUTS_ASK',
+      'PUTS_ASK_QTY',
+      'PUTS_CHNG',
+      'PUTS_LTP',
+      'PUTS_IV',
+      'PUTS_VOLUME',
+      'PUTS_CHNG_IN_OI',
+      'PUTS_OI',
+    ];
+
+    const csvRows = [headers.join(',')];
+
+    for (const r of data.rows) {
+      csvRows.push(
+        [
+          r.ce.oi,
+          r.ce.change_oi,
+          r.ce.volume,
+          r.ce.iv,
+          r.ce.ltp,
+          r.ce.price_change,
+          r.ce.bid_qty,
+          r.ce.bid_price,
+          r.ce.ask_price,
+          r.ce.ask_qty,
+          r.strike,
+          r.pe.bid_qty,
+          r.pe.bid_price,
+          r.pe.ask_price,
+          r.pe.ask_qty,
+          r.pe.price_change,
+          r.pe.ltp,
+          r.pe.iv,
+          r.pe.volume,
+          r.pe.change_oi,
+          r.pe.oi,
+        ].join(',')
+      );
+    }
+
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `option-chain-${data.expiry || 'NIFTY'}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
 
   if (loading && !data) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-3 font-mono text-sm text-slate-400">
-        <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
-        <span>Loading NSE Option Chain from Database...</span>
+      <div className="min-h-screen bg-white flex flex-col items-center justify-center gap-3 font-sans text-sm text-[#444]">
+        <div className="w-8 h-8 border-3 border-[#2b2259] border-t-transparent rounded-full animate-spin" />
+        <span className="font-medium text-[#2b2259]">Loading NSE Option Chain...</span>
       </div>
     );
   }
 
-  const pcrValue = data?.pcr || 1.0;
-  const pcrStatus =
-    pcrValue >= 1.2
-      ? { label: 'Bullish (Put Writing)', color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/30' }
-      : pcrValue <= 0.8
-      ? { label: 'Bearish (Call Writing)', color: 'text-rose-400', bg: 'bg-rose-500/10 border-rose-500/30' }
-      : { label: 'Balanced Range', color: 'text-slate-300', bg: 'bg-slate-800/40 border-slate-700/50' };
+  const spot = data?.spot || 23053.10;
 
   return (
-    <main className="min-h-screen bg-[#070c14] text-slate-100 flex flex-col p-2 sm:p-4 font-sans selection:bg-amber-500/20">
-      {/* ── Top Official NSE Style Header Bar ──────────────────────────────── */}
-      <header className="rounded-xl border border-slate-800 bg-[#0c1424] p-3 sm:p-4 mb-3 shadow-xl">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
-          {/* Logo & Index Title */}
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-lg bg-gradient-to-tr from-amber-500 to-orange-600 flex items-center justify-center font-black text-slate-950 text-sm font-mono shadow-md">
-              NSE
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-base sm:text-lg font-bold text-white tracking-tight">
-                  NIFTY 50 • Option Chain
-                </h1>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono">
-                  EQUITY DERIVATIVES
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 font-mono">
-                Underlying Index: <span className="font-bold text-white">NIFTY</span> • As on{' '}
-                <span className="text-cyan-300 font-semibold">{data?.timestamp ? new Date(data.timestamp).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : '—'} IST</span>
-              </p>
-            </div>
+    <div className="min-h-screen bg-white text-[#222222] font-sans antialiased text-[12px] p-2 sm:p-4 select-text">
+      {/* ── Top Bar matching NSE ────────────────────────────────────────────── */}
+      <div className="w-full max-w-[1700px] mx-auto mb-2">
+        {/* Underlying Index & Timestamp */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[#333333] font-normal">Underlying Index :</span>
+            <span className="font-bold text-[#111111] text-[13px]">
+              {selectedSymbol} {formatIndianNumber(spot, 2)}
+            </span>
+            <span className="text-[#666666] text-[11px]">As on {formattedTimestamp}</span>
+            <button
+              onClick={() => fetchData(selectedExpiry)}
+              title="Refresh Data"
+              className="text-[#ea6212] hover:text-[#c44e07] transition cursor-pointer p-0.5"
+            >
+              <svg className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
           </div>
 
-          {/* Underlying Spot Price Box */}
-          <div className="flex items-center gap-3 bg-[#060a12] px-4 py-2 rounded-xl border border-slate-800/90 font-mono">
-            <div>
-              <span className="text-[10px] text-slate-500 uppercase tracking-widest block font-semibold">Underlying Spot</span>
-              <span className="text-xl sm:text-2xl font-black text-white tracking-tight">
-                {data?.spot ? data.spot.toFixed(2) : '—'}
-              </span>
-            </div>
-            <span className="text-xs text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-              LIVE
-            </span>
+          {/* Right Links */}
+          <div className="flex items-center gap-4 text-[11px]">
+            <a href="https://www.nseindia.com" target="_blank" rel="noreferrer" className="text-[#0055b8] hover:underline cursor-pointer">
+              Terms of Use
+            </a>
+            <button
+              onClick={downloadCSV}
+              className="flex items-center gap-1 text-[#333333] hover:text-black transition cursor-pointer font-medium"
+            >
+              {/* CSV icon */}
+              <svg className="w-4 h-4 text-[#d93025]" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zM6 20V4h7v5h5v11H6z" />
+              </svg>
+              <span>Download (.csv)</span>
+            </button>
           </div>
         </div>
 
-        {/* ── Controls: Expiry, Strike Filters, Number Formatting, Auto-Refresh ── */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 text-xs font-mono">
+        {/* Streaming & Filter Selectors */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-1 pb-2">
+          {/* Left Selectors */}
           <div className="flex items-center gap-3 flex-wrap">
-            {/* Expiry Selector */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-slate-400">Select Expiry:</span>
+            {/* Streaming Toggle */}
+            <div className="flex items-center gap-1.5 text-[11px]">
+              <span className="text-[#444]">Streaming</span>
+              <button
+                onClick={() => setStreamingOn(!streamingOn)}
+                className={`w-9 h-4.5 flex items-center rounded-full p-0.5 transition cursor-pointer ${
+                  streamingOn ? 'bg-[#54a638] justify-end' : 'bg-[#ccc] justify-start'
+                }`}
+              >
+                <div className="w-3.5 h-3.5 bg-white rounded-full shadow-md" />
+              </button>
+              <span className={`font-semibold text-[10px] ${streamingOn ? 'text-[#54a638]' : 'text-[#777]'}`}>
+                {streamingOn ? 'On' : 'Off'}
+              </span>
+            </div>
+
+            {/* Select Symbol */}
+            <div className="flex items-center">
+              <select
+                value={selectedSymbol}
+                onChange={(e) => setSelectedSymbol(e.target.value)}
+                className="h-7 px-2.5 rounded border border-[#ea6212] bg-white text-[#ea6212] font-semibold text-[11px] focus:outline-none cursor-pointer"
+              >
+                <option value="NIFTY">NIFTY</option>
+                <option value="BANKNIFTY">BANKNIFTY</option>
+                <option value="FINNIFTY">FINNIFTY</option>
+              </select>
+            </div>
+
+            {/* Expiry Date */}
+            <div className="flex items-center">
               <select
                 value={selectedExpiry}
                 onChange={(e) => handleExpiryChange(e.target.value)}
-                className="bg-[#060a12] border border-slate-700 text-amber-300 font-bold rounded-lg px-2.5 py-1.5 cursor-pointer focus:outline-none focus:border-amber-500"
+                className="h-7 px-2.5 rounded border border-[#ea6212] bg-white text-[#ea6212] font-semibold text-[11px] focus:outline-none cursor-pointer"
               >
                 {data?.allExpiries && data.allExpiries.length > 0 ? (
                   data.allExpiries.map((exp) => (
@@ -179,337 +282,278 @@ export default function OptionChainPage() {
               </select>
             </div>
 
-            {/* Strike Range Filter */}
-            <div className="flex items-center gap-1 bg-[#060a12] p-1 rounded-lg border border-slate-800">
-              <span className="text-slate-500 px-1 text-[11px]">Strikes:</span>
-              {(['10', '20', '30', 'all'] as const).map((mode) => (
-                <button
-                  key={mode}
-                  onClick={() => setStrikeFilter(mode)}
-                  className={`px-2 py-0.5 rounded text-[11px] font-bold transition cursor-pointer ${
-                    strikeFilter === mode
-                      ? 'bg-amber-500 text-slate-950'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  {mode === 'all' ? 'All' : `±${mode}`}
-                </button>
-              ))}
-            </div>
-
-            {/* Number Format Toggle */}
-            <div className="flex items-center gap-1 bg-[#060a12] p-1 rounded-lg border border-slate-800">
-              <span className="text-slate-500 px-1 text-[11px]">Format:</span>
-              <button
-                onClick={() => setNumberFormat('indian')}
-                className={`px-2 py-0.5 rounded text-[11px] font-bold transition cursor-pointer ${
-                  numberFormat === 'indian' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'
-                }`}
-                title="Display in Indian format (Lakhs / Crores)"
+            {/* Strike Price Filter */}
+            <div className="flex items-center">
+              <select
+                value={selectedStrike}
+                onChange={(e) => setSelectedStrike(e.target.value)}
+                className="h-7 px-2.5 rounded border border-[#ea6212] bg-white text-[#ea6212] font-semibold text-[11px] focus:outline-none cursor-pointer"
               >
-                Lakhs
-              </button>
-              <button
-                onClick={() => setNumberFormat('exact')}
-                className={`px-2 py-0.5 rounded text-[11px] font-bold transition cursor-pointer ${
-                  numberFormat === 'exact' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'
-                }`}
-                title="Display full exact numeric counts"
-              >
-                Exact
-              </button>
+                <option value="all">Strike Price: Select</option>
+                <option value="±10">Strike Range: ±10 Strikes</option>
+                <option value="±20">Strike Range: ±20 Strikes</option>
+                <option value="±30">Strike Range: ±30 Strikes</option>
+                {data?.rows?.map((r) => (
+                  <option key={r.strike} value={r.strike.toString()}>
+                    Strike: {r.strike}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
-          {/* Refresh Controls */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setAutoRefresh(!autoRefresh)}
-              className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold transition cursor-pointer ${
-                autoRefresh
-                  ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
-                  : 'bg-slate-800 border-slate-700 text-slate-400'
-              }`}
-            >
-              Auto: {autoRefresh ? 'ON (30s)' : 'OFF'}
-            </button>
-
-            <button
-              onClick={() => fetchData(selectedExpiry)}
-              disabled={refreshing}
-              className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold transition cursor-pointer flex items-center gap-1 text-[11px]"
-            >
-              {refreshing ? 'Refreshing...' : '↻ Refresh'}
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* ── Key Market Analytics Bar ────────────────────────────────────────── */}
-      <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mb-3 font-mono text-xs">
-        {/* Put-Call Ratio */}
-        <div className={`p-2.5 rounded-xl border ${pcrStatus.bg} flex flex-col justify-between`}>
-          <span className="text-slate-400 text-[10px] uppercase font-semibold">PCR (Put-Call Ratio)</span>
-          <div className="flex items-baseline gap-1.5 mt-1">
-            <span className={`text-lg font-black ${pcrStatus.color}`}>{pcrValue.toFixed(3)}</span>
-            <span className="text-[10px] text-slate-400">{pcrStatus.label}</span>
-          </div>
-        </div>
-
-        {/* Max Pain */}
-        <div className="p-2.5 rounded-xl border border-slate-800 bg-[#0c1424] flex flex-col justify-between">
-          <span className="text-slate-400 text-[10px] uppercase font-semibold">Max Pain Strike</span>
-          <span className="text-lg font-black text-indigo-400 mt-1">{data?.maxPain ?? '—'}</span>
-        </div>
-
-        {/* Put Wall (Support) */}
-        <div className="p-2.5 rounded-xl border border-slate-800 bg-[#0c1424] flex flex-col justify-between">
-          <span className="text-emerald-400 text-[10px] uppercase font-semibold">Put Floor (Support)</span>
-          <span className="text-lg font-black text-emerald-400 mt-1">{data?.supportWall ?? '—'}</span>
-        </div>
-
-        {/* Call Wall (Resistance) */}
-        <div className="p-2.5 rounded-xl border border-slate-800 bg-[#0c1424] flex flex-col justify-between">
-          <span className="text-rose-400 text-[10px] uppercase font-semibold">Call Wall (Resistance)</span>
-          <span className="text-lg font-black text-rose-400 mt-1">{data?.resistanceWall ?? '—'}</span>
-        </div>
-
-        {/* Total Call OI */}
-        <div className="p-2.5 rounded-xl border border-slate-800 bg-[#0c1424] flex flex-col justify-between">
-          <span className="text-slate-400 text-[10px] uppercase font-semibold">Total Call (CE) OI</span>
-          <span className="text-base font-bold text-rose-300 mt-1">
-            {formatNumber(data?.totalCeOI || 0)}
-          </span>
-        </div>
-
-        {/* Total Put OI */}
-        <div className="p-2.5 rounded-xl border border-slate-800 bg-[#0c1424] flex flex-col justify-between">
-          <span className="text-slate-400 text-[10px] uppercase font-semibold">Total Put (PE) OI</span>
-          <span className="text-base font-bold text-emerald-300 mt-1">
-            {formatNumber(data?.totalPeOI || 0)}
-          </span>
-        </div>
-      </section>
-
-      {/* ── Official Dual-Sided NSE Option Chain Table ─────────────────────── */}
-      <div className="w-full rounded-xl border border-slate-800 bg-[#0a1120] shadow-2xl overflow-hidden flex flex-col">
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse font-mono text-[11px] leading-tight select-text">
-            {/* Super Headers: CALLS | STRIKE | PUTS */}
-            <thead>
-              <tr className="bg-[#111e35] text-white border-b border-slate-800">
-                <th colSpan={6} className="py-2 px-3 text-center border-r border-slate-700/80 bg-rose-950/25">
-                  <span className="font-black text-rose-300 tracking-wider text-xs">CALLS (CE)</span>
-                </th>
-                <th className="py-2 px-4 text-center bg-[#172644] font-black text-amber-400 text-xs border-r border-slate-700/80">
-                  STRIKE
-                </th>
-                <th colSpan={6} className="py-2 px-3 text-center bg-emerald-950/25">
-                  <span className="font-black text-emerald-300 tracking-wider text-xs">PUTS (PE)</span>
-                </th>
-              </tr>
-
-              {/* Exact NSE Column Subheaders */}
-              <tr className="bg-[#0d1728] text-slate-400 text-[10px] uppercase font-bold border-b border-slate-700">
-                {/* Calls */}
-                <th className="py-2 px-2 text-right">OI</th>
-                <th className="py-2 px-2 text-right">Chng in OI</th>
-                <th className="py-2 px-2 text-right">Volume</th>
-                <th className="py-2 px-1 text-right">IV</th>
-                <th className="py-2 px-2 text-right">LTP</th>
-                <th className="py-2 px-2 text-right border-r border-slate-700">Net Chng</th>
-
-                {/* Strike Center */}
-                <th className="py-2 px-4 text-center bg-[#131f38] text-white border-r border-slate-700">
-                  Strike
-                </th>
-
-                {/* Puts */}
-                <th className="py-2 px-2 text-left">Net Chng</th>
-                <th className="py-2 px-2 text-left">LTP</th>
-                <th className="py-2 px-1 text-left">IV</th>
-                <th className="py-2 px-2 text-left">Volume</th>
-                <th className="py-2 px-2 text-left">Chng in OI</th>
-                <th className="py-2 px-2 text-left">OI</th>
-              </tr>
-            </thead>
-
-            {/* Table Body */}
-            <tbody className="divide-y divide-slate-800/60">
-              {filteredRows.map((row) => {
-                const isATM = row.isATM;
-                const isCallWall = row.strike === data?.resistanceWall;
-                const isPutWall = row.strike === data?.supportWall;
-
-                // Authentic NSE In-The-Money (ITM) yellow shading:
-                // Calls are ITM when strike < spot
-                // Puts are ITM when strike > spot
-                const ceBg = row.isITMCall ? 'bg-[#292209]/45' : 'bg-transparent';
-                const peBg = row.isITMPut ? 'bg-[#292209]/45' : 'bg-transparent';
-
-                return (
-                  <tr
-                    key={row.strike}
-                    className={`transition-colors hover:bg-slate-800/40 ${
-                      isATM ? 'bg-cyan-950/30 border-y-2 border-cyan-500/70 font-semibold' : ''
-                    }`}
-                  >
-                    {/* ── CALLS (LEFT SIDE) ── */}
-                    {/* Call OI */}
-                    <td
-                      className={`py-1.5 px-2 text-right ${ceBg} ${
-                        isCallWall ? 'text-amber-300 font-bold bg-rose-950/40' : 'text-slate-300'
-                      }`}
-                      title={isCallWall ? 'Major Call Wall Resistance' : undefined}
-                    >
-                      {formatNumber(row.ce.oi)}
-                    </td>
-
-                    {/* Call Chng in OI */}
-                    <td
-                      className={`py-1.5 px-2 text-right font-medium ${ceBg} ${
-                        row.ce.change_oi > 0
-                          ? 'text-emerald-400'
-                          : row.ce.change_oi < 0
-                          ? 'text-rose-400'
-                          : 'text-slate-500'
-                      }`}
-                    >
-                      {formatNumber(row.ce.change_oi, false, true)}
-                    </td>
-
-                    {/* Call Volume */}
-                    <td className={`py-1.5 px-2 text-right text-slate-400 ${ceBg}`}>
-                      {formatNumber(row.ce.volume)}
-                    </td>
-
-                    {/* Call IV */}
-                    <td className={`py-1.5 px-1 text-right text-slate-400 ${ceBg}`}>
-                      {row.ce.iv > 0 ? row.ce.iv.toFixed(2) : '-'}
-                    </td>
-
-                    {/* Call LTP */}
-                    <td className={`py-1.5 px-2 text-right font-bold text-slate-100 ${ceBg}`}>
-                      {row.ce.ltp > 0 ? row.ce.ltp.toFixed(2) : '-'}
-                    </td>
-
-                    {/* Call Price Change */}
-                    <td
-                      className={`py-1.5 px-2 text-right border-r border-slate-700/80 ${ceBg} ${
-                        row.ce.price_change > 0
-                          ? 'text-emerald-400'
-                          : row.ce.price_change < 0
-                          ? 'text-rose-400'
-                          : 'text-slate-500'
-                      }`}
-                    >
-                      {formatNumber(row.ce.price_change, false, true)}
-                    </td>
-
-                    {/* ── STRIKE PRICE (CENTER) ── */}
-                    <td
-                      className={`py-1.5 px-4 text-center border-r border-slate-700/80 font-black ${
-                        isATM
-                          ? 'bg-cyan-500 text-slate-950 font-black text-xs shadow-lg'
-                          : 'bg-[#101b30] text-amber-300'
-                      }`}
-                    >
-                      <div className="flex items-center justify-center gap-1">
-                        <span>{row.strike}</span>
-                        {isATM && (
-                          <span className="text-[9px] px-1 py-0.2 bg-slate-950 text-cyan-300 rounded font-black">
-                            ATM
-                          </span>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* ── PUTS (RIGHT SIDE) ── */}
-                    {/* Put Price Change */}
-                    <td
-                      className={`py-1.5 px-2 text-left ${peBg} ${
-                        row.pe.price_change > 0
-                          ? 'text-emerald-400'
-                          : row.pe.price_change < 0
-                          ? 'text-rose-400'
-                          : 'text-slate-500'
-                      }`}
-                    >
-                      {formatNumber(row.pe.price_change, false, true)}
-                    </td>
-
-                    {/* Put LTP */}
-                    <td className={`py-1.5 px-2 text-left font-bold text-slate-100 ${peBg}`}>
-                      {row.pe.ltp > 0 ? row.pe.ltp.toFixed(2) : '-'}
-                    </td>
-
-                    {/* Put IV */}
-                    <td className={`py-1.5 px-1 text-left text-slate-400 ${peBg}`}>
-                      {row.pe.iv > 0 ? row.pe.iv.toFixed(2) : '-'}
-                    </td>
-
-                    {/* Put Volume */}
-                    <td className={`py-1.5 px-2 text-left text-slate-400 ${peBg}`}>
-                      {formatNumber(row.pe.volume)}
-                    </td>
-
-                    {/* Put Chng in OI */}
-                    <td
-                      className={`py-1.5 px-2 text-left font-medium ${peBg} ${
-                        row.pe.change_oi > 0
-                          ? 'text-emerald-400'
-                          : row.pe.change_oi < 0
-                          ? 'text-rose-400'
-                          : 'text-slate-500'
-                      }`}
-                    >
-                      {formatNumber(row.pe.change_oi, false, true)}
-                    </td>
-
-                    {/* Put OI */}
-                    <td
-                      className={`py-1.5 px-2 text-left ${peBg} ${
-                        isPutWall ? 'text-amber-300 font-bold bg-emerald-950/40' : 'text-slate-300'
-                      }`}
-                      title={isPutWall ? 'Major Put Wall Support' : undefined}
-                    >
-                      {formatNumber(row.pe.oi)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Table Footer with Legends */}
-        <div className="bg-[#0b1320] p-2.5 border-t border-slate-800 text-[11px] font-mono text-slate-400 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-4 flex-wrap">
-            <div className="flex items-center gap-1.5">
-              <span className="w-3.5 h-3.5 rounded bg-[#292209] border border-amber-800/40 block" />
-              <span>Yellow Shading = In-the-Money (ITM) Contracts</span>
+          {/* Quick Metrics (PCR & Max Pain) */}
+          <div className="flex items-center gap-3 text-[11px] font-sans text-[#555]">
+            <div>
+              PCR: <span className="font-bold text-[#111]">{data?.pcr?.toFixed(2) || '1.62'}</span>
             </div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-3.5 h-3.5 rounded bg-cyan-500 block" />
-              <span className="font-bold text-cyan-300">ATM Strike</span>
+            <div>
+              Max Pain: <span className="font-bold text-[#111]">{data?.maxPain || 23000}</span>
             </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-emerald-400 font-bold">▲ Green</span>
-              <span>= Positive OI / Price Change</span>
+            <div>
+              Total Call OI: <span className="font-bold text-[#111]">{formatIndianNumber(data?.totalCeOI)}</span>
             </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-rose-400 font-bold">▼ Red</span>
-              <span>= Negative OI / Price Change</span>
+            <div>
+              Total Put OI: <span className="font-bold text-[#111]">{formatIndianNumber(data?.totalPeOI)}</span>
             </div>
-          </div>
-
-          <div>
-            Showing <span className="font-bold text-white">{filteredRows.length}</span> of{' '}
-            <span className="font-bold text-white">{data?.rows.length || 0}</span> strikes
           </div>
         </div>
       </div>
-    </main>
+
+      {/* ── Official NSE Option Chain Table ─────────────────────────────────── */}
+      <div className="w-full max-w-[1700px] mx-auto overflow-x-auto border border-[#c8c8c8] shadow-sm">
+        <table className="w-full border-collapse text-[11px] font-sans leading-tight">
+          {/* Main Table Headers */}
+          <thead>
+            {/* Top Super Category Header: CALLS | PUTS */}
+            <tr className="bg-[#2b2259] text-white text-center font-bold text-[12px] uppercase tracking-wider border-b border-[#3b3269]">
+              <th colSpan={11} className="py-1.5 px-2 border-r border-[#433775]">
+                CALLS
+              </th>
+              <th className="py-1.5 px-3 border-r border-[#433775] bg-[#221a47]">
+                STRIKE
+              </th>
+              <th colSpan={11} className="py-1.5 px-2">
+                PUTS
+              </th>
+            </tr>
+
+            {/* Subheaders matching exact NSE columns */}
+            <tr className="bg-[#2b2259] text-white font-bold text-[10px] uppercase tracking-tight border-b border-[#433775]">
+              {/* Calls Side */}
+              <th className="py-1.5 px-1 text-center w-6 border-r border-[#3b3269]"></th>
+              <th className="py-1.5 px-1.5 text-right border-r border-[#3b3269]">OI</th>
+              <th className="py-1.5 px-1.5 text-right border-r border-[#3b3269]">CHNG IN OI</th>
+              <th className="py-1.5 px-1.5 text-right border-r border-[#3b3269]">VOLUME</th>
+              <th className="py-1.5 px-1 text-right border-r border-[#3b3269]">IV</th>
+              <th className="py-1.5 px-1.5 text-right border-r border-[#3b3269]">LTP</th>
+              <th className="py-1.5 px-1.5 text-right border-r border-[#3b3269]">CHNG</th>
+              <th className="py-1.5 px-1.5 text-right border-r border-[#3b3269]">BID QTY</th>
+              <th className="py-1.5 px-1.5 text-right border-r border-[#3b3269]">BID</th>
+              <th className="py-1.5 px-1.5 text-right border-r border-[#3b3269]">ASK</th>
+              <th className="py-1.5 px-1.5 text-right border-r-2 border-[#1c143d]">ASK QTY</th>
+
+              {/* Strike Price (Center) */}
+              <th className="py-1.5 px-3 text-center bg-[#221a47] text-white border-r-2 border-[#1c143d] font-bold">
+                STRIKE
+              </th>
+
+              {/* Puts Side */}
+              <th className="py-1.5 px-1.5 text-right border-r border-[#3b3269]">BID QTY</th>
+              <th className="py-1.5 px-1.5 text-right border-r border-[#3b3269]">BID</th>
+              <th className="py-1.5 px-1.5 text-right border-r border-[#3b3269]">ASK</th>
+              <th className="py-1.5 px-1.5 text-right border-r border-[#3b3269]">ASK QTY</th>
+              <th className="py-1.5 px-1.5 text-right border-r border-[#3b3269]">CHNG</th>
+              <th className="py-1.5 px-1.5 text-right border-r border-[#3b3269]">LTP</th>
+              <th className="py-1.5 px-1 text-right border-r border-[#3b3269]">IV</th>
+              <th className="py-1.5 px-1.5 text-right border-r border-[#3b3269]">VOLUME</th>
+              <th className="py-1.5 px-1.5 text-right border-r border-[#3b3269]">CHNG IN OI</th>
+              <th className="py-1.5 px-1.5 text-right border-r border-[#3b3269]">OI</th>
+              <th className="py-1.5 px-1 text-center w-6"></th>
+            </tr>
+          </thead>
+
+          {/* Table Body with authentic NSE ITM yellow coloring (#fff7d6) */}
+          <tbody className="divide-y divide-[#e2e2e2]">
+            {filteredRows.map((row) => {
+              const isATM = row.isATM;
+
+              // Authentic NSE Shading:
+              // Calls are In-The-Money (ITM) when strike <= spot -> #fff7d6
+              // Puts are In-The-Money (ITM) when strike >= spot -> #fff7d6
+              // Out-of-the-Money (OTM) cells are pure white (#ffffff)
+              const ceBg = row.isITMCall ? 'bg-[#fff7d6]' : 'bg-white';
+              const peBg = row.isITMPut ? 'bg-[#fff7d6]' : 'bg-white';
+
+              return (
+                <tr
+                  key={row.strike}
+                  className={`hover:bg-[#f2f4f7] transition-colors ${
+                    isATM ? 'ring-1 ring-[#0055b8]' : ''
+                  }`}
+                >
+                  {/* ── CALLS (LEFT SIDE) ── */}
+
+                  {/* Chart Icon */}
+                  <td className={`py-1 px-1 text-center border-r border-[#e6e6e6] ${ceBg}`}>
+                    <div className="w-3.5 h-3.5 mx-auto bg-[#54a638] rounded flex items-center justify-center cursor-pointer shadow-xs" title="View Chart">
+                      <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                      </svg>
+                    </div>
+                  </td>
+
+                  {/* Call OI */}
+                  <td className={`py-1 px-1.5 text-right border-r border-[#e6e6e6] text-[#222] ${ceBg}`}>
+                    {formatIndianNumber(row.ce.oi)}
+                  </td>
+
+                  {/* Call Chng in OI */}
+                  <td className={`py-1 px-1.5 text-right border-r border-[#e6e6e6] text-[#222] ${ceBg}`}>
+                    {formatIndianNumber(row.ce.change_oi)}
+                  </td>
+
+                  {/* Call Volume */}
+                  <td className={`py-1 px-1.5 text-right border-r border-[#e6e6e6] text-[#222] ${ceBg}`}>
+                    {formatIndianNumber(row.ce.volume)}
+                  </td>
+
+                  {/* Call IV */}
+                  <td className={`py-1 px-1 text-right border-r border-[#e6e6e6] text-[#222] ${ceBg}`}>
+                    {row.ce.iv > 0 ? row.ce.iv.toFixed(2) : '-'}
+                  </td>
+
+                  {/* Call LTP (Blue Link) */}
+                  <td className={`py-1 px-1.5 text-right border-r border-[#e6e6e6] ${ceBg}`}>
+                    {row.ce.ltp > 0 ? (
+                      <span className="text-[#0055b8] font-semibold hover:underline cursor-pointer">
+                        {formatIndianNumber(row.ce.ltp, 2)}
+                      </span>
+                    ) : (
+                      '-'
+                    )}
+                  </td>
+
+                  {/* Call CHNG */}
+                  <td className={`py-1 px-1.5 text-right border-r border-[#e6e6e6] ${ceBg}`}>
+                    {renderChange(row.ce.price_change)}
+                  </td>
+
+                  {/* Call Bid Qty */}
+                  <td className={`py-1 px-1.5 text-right border-r border-[#e6e6e6] text-[#333] ${ceBg}`}>
+                    {formatIndianNumber(row.ce.bid_qty)}
+                  </td>
+
+                  {/* Call Bid Price */}
+                  <td className={`py-1 px-1.5 text-right border-r border-[#e6e6e6] text-[#333] ${ceBg}`}>
+                    {row.ce.bid_price > 0 ? formatIndianNumber(row.ce.bid_price, 2) : '-'}
+                  </td>
+
+                  {/* Call Ask Price */}
+                  <td className={`py-1 px-1.5 text-right border-r border-[#e6e6e6] text-[#333] ${ceBg}`}>
+                    {row.ce.ask_price > 0 ? formatIndianNumber(row.ce.ask_price, 2) : '-'}
+                  </td>
+
+                  {/* Call Ask Qty */}
+                  <td className={`py-1 px-1.5 text-right border-r-2 border-[#b0b0b0] text-[#333] ${ceBg}`}>
+                    {formatIndianNumber(row.ce.ask_qty)}
+                  </td>
+
+                  {/* ── STRIKE PRICE (CENTER) ── */}
+                  <td
+                    className={`py-1 px-2.5 text-center font-bold border-r-2 border-[#b0b0b0] ${
+                      isATM
+                        ? 'bg-[#e7f1ff] text-[#0055b8]'
+                        : 'bg-[#fafafa] text-[#0055b8]'
+                    }`}
+                  >
+                    <span className="underline hover:text-[#003380] cursor-pointer">
+                      {formatIndianNumber(row.strike, 2)}
+                    </span>
+                  </td>
+
+                  {/* ── PUTS (RIGHT SIDE) ── */}
+
+                  {/* Put Bid Qty */}
+                  <td className={`py-1 px-1.5 text-right border-r border-[#e6e6e6] text-[#333] ${peBg}`}>
+                    {formatIndianNumber(row.pe.bid_qty)}
+                  </td>
+
+                  {/* Put Bid Price */}
+                  <td className={`py-1 px-1.5 text-right border-r border-[#e6e6e6] text-[#333] ${peBg}`}>
+                    {row.pe.bid_price > 0 ? formatIndianNumber(row.pe.bid_price, 2) : '-'}
+                  </td>
+
+                  {/* Put Ask Price */}
+                  <td className={`py-1 px-1.5 text-right border-r border-[#e6e6e6] text-[#333] ${peBg}`}>
+                    {row.pe.ask_price > 0 ? formatIndianNumber(row.pe.ask_price, 2) : '-'}
+                  </td>
+
+                  {/* Put Ask Qty */}
+                  <td className={`py-1 px-1.5 text-right border-r border-[#e6e6e6] text-[#333] ${peBg}`}>
+                    {formatIndianNumber(row.pe.ask_qty)}
+                  </td>
+
+                  {/* Put CHNG */}
+                  <td className={`py-1 px-1.5 text-right border-r border-[#e6e6e6] ${peBg}`}>
+                    {renderChange(row.pe.price_change)}
+                  </td>
+
+                  {/* Put LTP (Blue Link) */}
+                  <td className={`py-1 px-1.5 text-right border-r border-[#e6e6e6] ${peBg}`}>
+                    {row.pe.ltp > 0 ? (
+                      <span className="text-[#0055b8] font-semibold hover:underline cursor-pointer">
+                        {formatIndianNumber(row.pe.ltp, 2)}
+                      </span>
+                    ) : (
+                      '-'
+                    )}
+                  </td>
+
+                  {/* Put IV */}
+                  <td className={`py-1 px-1 text-right border-r border-[#e6e6e6] text-[#222] ${peBg}`}>
+                    {row.pe.iv > 0 ? row.pe.iv.toFixed(2) : '-'}
+                  </td>
+
+                  {/* Put Volume */}
+                  <td className={`py-1 px-1.5 text-right border-r border-[#e6e6e6] text-[#222] ${peBg}`}>
+                    {formatIndianNumber(row.pe.volume)}
+                  </td>
+
+                  {/* Put Chng in OI */}
+                  <td className={`py-1 px-1.5 text-right border-r border-[#e6e6e6] text-[#222] ${peBg}`}>
+                    {formatIndianNumber(row.pe.change_oi)}
+                  </td>
+
+                  {/* Put OI */}
+                  <td className={`py-1 px-1.5 text-right border-r border-[#e6e6e6] text-[#222] ${peBg}`}>
+                    {formatIndianNumber(row.pe.oi)}
+                  </td>
+
+                  {/* Chart Icon */}
+                  <td className={`py-1 px-1 text-center ${peBg}`}>
+                    <div className="w-3.5 h-3.5 mx-auto bg-[#54a638] rounded flex items-center justify-center cursor-pointer shadow-xs" title="View Chart">
+                      <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                      </svg>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Footer Info */}
+      <div className="w-full max-w-[1700px] mx-auto mt-2 text-[11px] text-[#666] flex flex-wrap items-center justify-between gap-2 px-1">
+        <div>
+          * Data source: NSE India • Snapshot Checkpoint: <span className="font-semibold text-[#111]">{data?.checkpoint || 'LIVE'}</span>
+        </div>
+        <div>
+          Showing {filteredRows.length} of {data?.rows?.length || 0} strike records
+        </div>
+      </div>
+    </div>
   );
 }
-

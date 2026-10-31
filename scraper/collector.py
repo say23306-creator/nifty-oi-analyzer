@@ -108,6 +108,10 @@ class OptionChainCollector:
             ce_change = float(ce.get("change", 0.0) or 0.0)
             ce_vol = int(ce.get("totalTradedVolume", 0) or 0)
             ce_iv = float(ce.get("impliedVolatility", 0.0) or 0.0)
+            ce_bid_qty = int(ce.get("buyQuantity1", 0) or 0)
+            ce_bid_price = float(ce.get("buyPrice1", 0.0) or 0.0)
+            ce_ask_price = float(ce.get("sellPrice1", 0.0) or 0.0)
+            ce_ask_qty = int(ce.get("sellQuantity1", 0) or 0)
 
             pe_oi = int(pe.get("openInterest", 0) or 0)
             pe_chg_oi = int(pe.get("changeinOpenInterest", 0) or 0)
@@ -116,6 +120,10 @@ class OptionChainCollector:
             pe_change = float(pe.get("change", 0.0) or 0.0)
             pe_vol = int(pe.get("totalTradedVolume", 0) or 0)
             pe_iv = float(pe.get("impliedVolatility", 0.0) or 0.0)
+            pe_bid_qty = int(pe.get("buyQuantity1", 0) or 0)
+            pe_bid_price = float(pe.get("buyPrice1", 0.0) or 0.0)
+            pe_ask_price = float(pe.get("sellPrice1", 0.0) or 0.0)
+            pe_ask_qty = int(pe.get("sellQuantity1", 0) or 0)
 
             total_ce_oi += ce_oi
             total_pe_oi += pe_oi
@@ -133,6 +141,10 @@ class OptionChainCollector:
                 "volume": ce_vol,
                 "iv": ce_iv,
                 "price_change": ce_change,
+                "bid_qty": ce_bid_qty,
+                "bid_price": ce_bid_price,
+                "ask_price": ce_ask_price,
+                "ask_qty": ce_ask_qty,
             })
 
             # PE row
@@ -146,6 +158,10 @@ class OptionChainCollector:
                 "volume": pe_vol,
                 "iv": pe_iv,
                 "price_change": pe_change,
+                "bid_qty": pe_bid_qty,
+                "bid_price": pe_bid_price,
+                "ask_price": pe_ask_price,
+                "ask_qty": pe_ask_qty,
             })
 
             parsed_pairs.append({

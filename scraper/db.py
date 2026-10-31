@@ -70,7 +70,8 @@ def insert_chain_rows_batch(snapshot_id: int, rows: List[Dict[str, Any]]):
     """
     Inserts all strike rows for the given snapshot.
     Each item in rows has:
-      strike, type ('CE' or 'PE'), ltp, oi, change_oi, pchange_oi, volume, iv, price_change
+      strike, type ('CE' or 'PE'), ltp, oi, change_oi, pchange_oi, volume, iv, price_change,
+      bid_qty, bid_price, ask_price, ask_qty
     """
     if not rows:
         return
@@ -80,8 +81,8 @@ def insert_chain_rows_batch(snapshot_id: int, rows: List[Dict[str, Any]]):
         with conn.cursor() as cur:
             query = """
                 INSERT INTO chain_rows 
-                (snapshot_id, strike, type, ltp, oi, volume, iv, change_oi, pchange_oi, price_change)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+                (snapshot_id, strike, type, ltp, oi, volume, iv, change_oi, pchange_oi, price_change, bid_qty, bid_price, ask_price, ask_qty)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
             """
             data_tuples = [
                 (
@@ -95,6 +96,10 @@ def insert_chain_rows_batch(snapshot_id: int, rows: List[Dict[str, Any]]):
                     r.get("change_oi") or 0,
                     r.get("pchange_oi") or 0.0,
                     r.get("price_change") or 0.0,
+                    r.get("bid_qty") or 0,
+                    r.get("bid_price") or 0.0,
+                    r.get("ask_price") or 0.0,
+                    r.get("ask_qty") or 0,
                 )
                 for r in rows
             ]
