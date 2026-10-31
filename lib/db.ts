@@ -74,6 +74,7 @@ export interface PairedStrikeRow {
 export interface OptionChainPayload {
   snapshotId: number;
   spot: number;
+  ltp: number;
   timestamp: string;
   checkpoint: string;
   expiry: string;
@@ -93,7 +94,7 @@ export async function fetchOptionChainFromDb(selectedExpiry?: string): Promise<O
     let snapshotRows;
     if (selectedExpiry) {
       snapshotRows = await sql`
-        SELECT id, ts, expiry, spot, checkpoint, pcr, total_ce_oi, total_pe_oi, max_pain
+        SELECT id, ts, expiry, spot, ltp, checkpoint, pcr, total_ce_oi, total_pe_oi, max_pain
         FROM snapshots
         WHERE expiry = ${selectedExpiry}
         ORDER BY ts DESC
@@ -101,7 +102,7 @@ export async function fetchOptionChainFromDb(selectedExpiry?: string): Promise<O
       `;
     } else {
       snapshotRows = await sql`
-        SELECT id, ts, expiry, spot, checkpoint, pcr, total_ce_oi, total_pe_oi, max_pain
+        SELECT id, ts, expiry, spot, ltp, checkpoint, pcr, total_ce_oi, total_pe_oi, max_pain
         FROM snapshots
         ORDER BY ts DESC
         LIMIT 1;
@@ -115,6 +116,7 @@ export async function fetchOptionChainFromDb(selectedExpiry?: string): Promise<O
     const snap = snapshotRows[0];
     const snapshotId = Number(snap.id);
     const spot = Number(snap.spot);
+    const ltp = Number(snap.ltp || snap.spot);
     const expiryStr = snap.expiry ? new Date(snap.expiry).toISOString().split('T')[0] : '';
 
     // 2. Fetch all unique expiries
@@ -208,6 +210,7 @@ export async function fetchOptionChainFromDb(selectedExpiry?: string): Promise<O
     return {
       snapshotId,
       spot,
+      ltp,
       timestamp: snap.ts ? new Date(snap.ts).toISOString() : new Date().toISOString(),
       checkpoint: snap.checkpoint || 'LIVE',
       expiry: expiryStr,

@@ -45,19 +45,21 @@ def insert_hourly_snapshot(
     total_pe_oi: int,
     max_pain: float,
     captured_at: Optional[datetime] = None,
+    ltp: Optional[float] = None,
 ) -> int:
     """Inserts a master snapshot record and returns its ID."""
     ts = captured_at or datetime.now(timezone.utc)
+    current_ltp = ltp if ltp is not None else spot
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO snapshots (ts, expiry, spot, checkpoint, pcr, total_ce_oi, total_pe_oi, max_pain)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO snapshots (ts, expiry, spot, ltp, checkpoint, pcr, total_ce_oi, total_pe_oi, max_pain)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id;
                 """,
-                (ts, expiry_date, spot, checkpoint, pcr, total_ce_oi, total_pe_oi, max_pain),
+                (ts, expiry_date, spot, current_ltp, checkpoint, pcr, total_ce_oi, total_pe_oi, max_pain),
             )
             snapshot_id = cur.fetchone()[0]
         conn.commit()
@@ -116,7 +118,7 @@ def get_latest_snapshot() -> Optional[Dict[str, Any]]:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 """
-                SELECT id, ts, expiry, spot, checkpoint, pcr, total_ce_oi, total_pe_oi, max_pain
+                SELECT id, ts, expiry, spot, ltp, checkpoint, pcr, total_ce_oi, total_pe_oi, max_pain
                 FROM snapshots
                 ORDER BY ts DESC
                 LIMIT 1;
@@ -135,7 +137,7 @@ def get_previous_hourly_snapshot(current_date_str: str) -> Optional[Dict[str, An
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 """
-                SELECT id, ts, spot, checkpoint, pcr, total_ce_oi, total_pe_oi, max_pain
+                SELECT id, ts, spot, ltp, checkpoint, pcr, total_ce_oi, total_pe_oi, max_pain
                 FROM snapshots
                 WHERE DATE(ts AT TIME ZONE 'Asia/Kolkata') = %s
                 ORDER BY ts DESC
@@ -156,7 +158,7 @@ def get_snapshots_for_day(date_str: str) -> List[Dict[str, Any]]:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 """
-                SELECT id, ts, spot, checkpoint, pcr, total_ce_oi, total_pe_oi, max_pain
+                SELECT id, ts, spot, ltp, checkpoint, pcr, total_ce_oi, total_pe_oi, max_pain
                 FROM snapshots
                 WHERE DATE(ts AT TIME ZONE 'Asia/Kolkata') = %s
                 ORDER BY ts ASC;

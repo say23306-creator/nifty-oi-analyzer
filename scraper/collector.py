@@ -188,6 +188,7 @@ class OptionChainCollector:
             total_pe_oi=total_pe_oi,
             max_pain=max_pain,
             captured_at=now_utc,
+            ltp=spot,
         )
 
         # ── 2. Batch Insert All Strike Rows ────────────────────────────────────
@@ -195,7 +196,7 @@ class OptionChainCollector:
 
         logger.info(
             f"[collector] Saved Snapshot #{snapshot_id} ({checkpoint_label}): "
-            f"Spot={spot:.2f}, PCR={pcr:.3f}, MaxPain={max_pain}, Strikes={len(raw_data)} (Total Rows: {len(db_rows)})"
+            f"Spot/LTP={spot:.2f}, PCR={pcr:.3f}, MaxPain={max_pain}, Strikes={len(raw_data)} (Total Rows: {len(db_rows)})"
         )
 
         result_summary = {
@@ -204,6 +205,7 @@ class OptionChainCollector:
             "timestamp_ist": now_ist.strftime("%Y-%m-%d %H:%M:%S IST"),
             "expiry": selected_expiry,
             "spot": spot,
+            "ltp": spot,
             "pcr": pcr,
             "max_pain": max_pain,
             "total_ce_oi": total_ce_oi,

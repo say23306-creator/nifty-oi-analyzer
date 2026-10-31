@@ -44,7 +44,7 @@ def run_audit(target_date_str: Optional[str] = None):
             # 1. Fetch all snapshots for the day
             cur.execute(
                 """
-                SELECT id, ts, spot, checkpoint, pcr, total_ce_oi, total_pe_oi, max_pain
+                SELECT id, ts, spot, checkpoint, pcr, total_ce_oi, total_pe_oi, max_pain, ltp
                 FROM snapshots
                 WHERE DATE(ts AT TIME ZONE 'Asia/Kolkata') = %s
                 ORDER BY ts ASC;
@@ -58,7 +58,7 @@ def run_audit(target_date_str: Optional[str] = None):
                 print(f"\n[!] No snapshots recorded for {audit_date}.")
                 cur.execute(
                     """
-                    SELECT id, ts AT TIME ZONE 'Asia/Kolkata' as ts_ist, spot, checkpoint, pcr
+                    SELECT id, ts AT TIME ZONE 'Asia/Kolkata' as ts_ist, spot, checkpoint, pcr, ltp
                     FROM snapshots
                     ORDER BY id DESC
                     LIMIT 5;
@@ -68,7 +68,8 @@ def run_audit(target_date_str: Optional[str] = None):
                 if recent:
                     print("\nMost recent snapshots available in DB:")
                     for r in recent:
-                        print(f"  • Snapshot #{r[0]} at {r[1].strftime('%Y-%m-%d %H:%M:%S')} IST | Checkpoint: {r[3]} | Spot: {r[2]} | PCR: {r[4]}")
+                        current_ltp = float(r[5] or r[2])
+                        print(f"  * Snapshot #{r[0]} at {r[1].strftime('%Y-%m-%d %H:%M:%S')} IST | Checkpoint: {r[3]} | LTP: {current_ltp:,.2f} | PCR: {r[4]}")
                 print("\n" + "=" * 78 + "\n")
                 return
 
@@ -80,9 +81,9 @@ def run_audit(target_date_str: Optional[str] = None):
                 snap_by_label[key] = s
 
             print(f"\n[1] HOURLY CHECKPOINT COMPLETION (Expected: 8 Slots)")
-            print("-" * 78)
-            print(f"{'SLOT':<8} | {'STATUS':<9} | {'SNAP ID':<8} | {'RECORDED TIME (IST)':<20} | {'SPOT':<9} | {'STRIKES'}")
-            print("-" * 78)
+            print("-" * 80)
+            print(f"{'SLOT':<8} | {'STATUS':<9} | {'SNAP ID':<8} | {'RECORDED TIME (IST)':<20} | {'LTP / SPOT':<11} | {'STRIKES'}")
+            print("-" * 80)
 
             all_passed = True
             total_captured = 0
@@ -92,7 +93,8 @@ def run_audit(target_date_str: Optional[str] = None):
                     s = snap_by_label[label]
                     snap_id = s[0]
                     ts_ist = s[1].astimezone(IST).strftime("%H:%M:%S IST")
-                    spot = f"{float(s[2]):,.2f}"
+                    ltp_val = float(s[8] or s[2])
+                    ltp_fmt = f"{ltp_val:,.2f}"
 
                     # Count chain rows for this snapshot
                     cur.execute(
@@ -105,18 +107,18 @@ def run_audit(target_date_str: Optional[str] = None):
 
                     status = "[PASS]" if total_rows >= 50 else "[WARN LOW]"
                     total_captured += 1
-                    print(f"{label:<8} | {status:<9} | #{snap_id:<7} | {ts_ist:<20} | {spot:<9} | {total_rows} rows ({strikes_count} strikes)")
+                    print(f"{label:<8} | {status:<9} | #{snap_id:<7} | {ts_ist:<20} | {ltp_fmt:<11} | {total_rows} rows ({strikes_count} strikes)")
                 else:
                     # Check if slot time has passed
                     slot_min = h * 60 + m
                     current_min = now_ist.hour * 60 + now_ist.minute
                     if current_min > slot_min and audit_date == now_ist.strftime("%Y-%m-%d"):
-                        print(f"{label:<8} | [MISSED]   | -        | -                    | -         | -")
+                        print(f"{label:<8} | [MISSED]   | -        | -                    | -           | -")
                         all_passed = False
                     else:
-                        print(f"{label:<8} | [PENDING]  | -        | -                    | -         | (Scheduled)")
+                        print(f"{label:<8} | [PENDING]  | -        | -                    | -           | (Scheduled)")
 
-            print("-" * 78)
+            print("-" * 80)
             print(f"Captured: {total_captured} of {len(SCHEDULED_CHECKPOINTS)} scheduled checkpoints")
 
             # Check for extra/manual snapshots recorded today
@@ -127,10 +129,11 @@ def run_audit(target_date_str: Optional[str] = None):
                     snap_id = s[0]
                     ts_ist = s[1].astimezone(IST).strftime("%H:%M:%S IST")
                     cp = s[3] or "MANUAL"
-                    spot = f"{float(s[2]):,.2f}"
+                    ltp_val = float(s[8] or s[2])
+                    ltp_fmt = f"{ltp_val:,.2f}"
                     cur.execute("SELECT COUNT(*) FROM chain_rows WHERE snapshot_id = %s;", (snap_id,))
                     cnt = cur.fetchone()[0]
-                    print(f"  * Snapshot #{snap_id} at {ts_ist} | Checkpoint: {cp} | Spot: {spot} | Rows: {cnt}")
+                    print(f"  * Snapshot #{snap_id} at {ts_ist} | Checkpoint: {cp} | LTP: {ltp_fmt} | Rows: {cnt}")
 
             # 2. Precision & Sanity Audit on Latest Snapshot
             latest = snapshots[-1]

@@ -8,12 +8,46 @@ Autonomous, high-precision Open Interest (OI) scraping and database storage engi
 ## 🎯 System Objectives
 - **Coverage:** Scrapes every single active strike price (Calls & Puts) across the entire option chain.
 - **Cadence:** Strictly captures hourly snapshots during NSE market hours from **09:15 AM to 03:15 PM IST** (and 15:30 close wrap).
-- **Precision Storage:** Stores spot price, aggregate PCR, Max Pain, and individual strike LTP, OI, $\Delta OI$, Volume, and IV into PostgreSQL (Supabase).
+- **Precision Storage:** Stores underlying index LTP & spot price, aggregate PCR, Max Pain, and individual strike LTP, OI, $\Delta OI$, Volume, and IV into PostgreSQL (Supabase).
 - **Zero-Miss Guarantee:**
   - Automated session warming with Akamai TLS fingerprint bypass (`curl_cffi`).
   - 5-stage exponential backoff retry on transient network drops.
   - Missed checkpoint self-healing: Automatically detects if a past hourly slot was missed today and backfills it immediately.
   - Instant Telegram broadcast confirmation for every stored snapshot.
+
+---
+
+## 🗄️ Database Schema (Supabase PostgreSQL)
+
+### 1. `snapshots` (Master Hourly Checkpoints)
+| Column | Type | Description |
+|:---|:---|:---|
+| `id` | `BIGINT` | Auto-incrementing primary key |
+| `ts` | `TIMESTAMPTZ` | Timestamp in UTC |
+| `expiry` | `DATE` | Current weekly/monthly option contract expiry date |
+| `spot` | `NUMERIC` | Underlying Nifty 50 index spot price |
+| `ltp` | `NUMERIC` | Current market price (LTP) of the index for that hour |
+| `checkpoint` | `VARCHAR` | Hourly label (`09:15`, `10:15`, ..., `15:30`) |
+| `pcr` | `NUMERIC` | Aggregate Put-Call Ratio ($\Sigma PE\_OI / \Sigma CE\_OI$) |
+| `total_ce_oi` | `BIGINT` | Sum of Open Interest across all Call strikes |
+| `total_pe_oi` | `BIGINT` | Sum of Open Interest across all Put strikes |
+| `max_pain` | `NUMERIC` | True settlement loss minimization strike |
+
+### 2. `chain_rows` (Granular Strike-Level Data)
+| Column | Type | Description |
+|:---|:---|:---|
+| `id` | `BIGINT` | Primary key |
+| `snapshot_id` | `BIGINT` | Foreign key referencing `snapshots(id)` |
+| `strike` | `INTEGER` | Strike price (e.g., `23000`, `23050`, `23100`) |
+| `type` | `CHAR` | `'CE'` (Call) or `'PE'` (Put) |
+| `ltp` | `NUMERIC` | Current Last Traded Price of that specific option |
+| `price_change`| `NUMERIC` | Net price change |
+| `oi` | `BIGINT` | Total Open Interest for that strike |
+| `change_oi` | `BIGINT` | Absolute change in OI |
+| `pchange_oi`| `NUMERIC` | Percentage change in OI |
+| `volume` | `BIGINT` | Contracts traded volume |
+| `iv` | `NUMERIC` | Implied Volatility |
+| `bid_qty`, `bid_price`, `ask_price`, `ask_qty` | `NUMERIC/BIGINT` | Market depth |
 
 ---
 

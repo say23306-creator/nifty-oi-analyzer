@@ -39,6 +39,7 @@ def send_hourly_store_alert(result: dict) -> bool:
     checkpoint = result.get("checkpoint", "HOURLY")
     ts = result.get("timestamp_ist", "")
     spot = result.get("spot", 0.0)
+    ltp = result.get("ltp") or spot
     pcr = result.get("pcr", 0.0)
     max_pain = result.get("max_pain", 0)
     total_ce = result.get("total_ce_oi", 0)
@@ -58,7 +59,7 @@ def send_hourly_store_alert(result: dict) -> bool:
         f"<b>📊 NIFTY 50 • HOURLY OI STORED TO DATABASE</b>\n"
         f"<i>Checkpoint: {checkpoint} • {ts}</i>\n"
         f"━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"🎯 <b>Spot Price:</b> <code>{spot:.2f}</code>\n"
+        f"🎯 <b>Spot / LTP:</b> <code>{ltp:.2f}</code>\n"
         f"📈 <b>Put-Call Ratio (PCR):</b> <code>{pcr:.3f}</code>\n"
         f"⚖️ <b>Max Pain Strike:</b> <code>{int(max_pain)}</code>\n"
         f"• Total Call (CE) OI: <code>{fmt_oi(total_ce)}</code>\n"
