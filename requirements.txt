@@ -1,0 +1,6 @@
+# Core Scraping & TLS Fingerprint Bypass
+curl_cffi>=0.7.4
+requests>=2.31.0
+
+# PostgreSQL Database (Supabase)
+psycopg2-binary>=2.9.9
