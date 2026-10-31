@@ -298,13 +298,13 @@ export default function OptionChainPage() {
             {/* Super Headers: CALLS | STRIKE | PUTS */}
             <thead>
               <tr className="bg-[#111e35] text-white border-b border-slate-800">
-                <th colSpan={7} className="py-2 px-3 text-center border-r border-slate-700/80 bg-rose-950/25">
+                <th colSpan={6} className="py-2 px-3 text-center border-r border-slate-700/80 bg-rose-950/25">
                   <span className="font-black text-rose-300 tracking-wider text-xs">CALLS (CE)</span>
                 </th>
                 <th className="py-2 px-4 text-center bg-[#172644] font-black text-amber-400 text-xs border-r border-slate-700/80">
                   STRIKE
                 </th>
-                <th colSpan={7} className="py-2 px-3 text-center bg-emerald-950/25">
+                <th colSpan={6} className="py-2 px-3 text-center bg-emerald-950/25">
                   <span className="font-black text-emerald-300 tracking-wider text-xs">PUTS (PE)</span>
                 </th>
               </tr>
@@ -314,7 +314,6 @@ export default function OptionChainPage() {
                 {/* Calls */}
                 <th className="py-2 px-2 text-right">OI</th>
                 <th className="py-2 px-2 text-right">Chng in OI</th>
-                <th className="py-2 px-1 text-right">% Chng</th>
                 <th className="py-2 px-2 text-right">Volume</th>
                 <th className="py-2 px-1 text-right">IV</th>
                 <th className="py-2 px-2 text-right">LTP</th>
@@ -330,7 +329,6 @@ export default function OptionChainPage() {
                 <th className="py-2 px-2 text-left">LTP</th>
                 <th className="py-2 px-1 text-left">IV</th>
                 <th className="py-2 px-2 text-left">Volume</th>
-                <th className="py-2 px-1 text-left">% Chng</th>
                 <th className="py-2 px-2 text-left">Chng in OI</th>
                 <th className="py-2 px-2 text-left">OI</th>
               </tr>
@@ -378,19 +376,6 @@ export default function OptionChainPage() {
                       }`}
                     >
                       {formatNumber(row.ce.change_oi, false, true)}
-                    </td>
-
-                    {/* Call % Chng in OI */}
-                    <td
-                      className={`py-1.5 px-1 text-right text-[10px] ${ceBg} ${
-                        row.ce.pchange_oi > 0
-                          ? 'text-emerald-400'
-                          : row.ce.pchange_oi < 0
-                          ? 'text-rose-400'
-                          : 'text-slate-500'
-                      }`}
-                    >
-                      {formatNumber(row.ce.pchange_oi, true, true)}
                     </td>
 
                     {/* Call Volume */}
@@ -468,19 +453,6 @@ export default function OptionChainPage() {
                       {formatNumber(row.pe.volume)}
                     </td>
 
-                    {/* Put % Chng in OI */}
-                    <td
-                      className={`py-1.5 px-1 text-left text-[10px] ${peBg} ${
-                        row.pe.pchange_oi > 0
-                          ? 'text-emerald-400'
-                          : row.pe.pchange_oi < 0
-                          ? 'text-rose-400'
-                          : 'text-slate-500'
-                      }`}
-                    >
-                      {formatNumber(row.pe.pchange_oi, true, true)}
-                    </td>
-
                     {/* Put Chng in OI */}
                     <td
                       className={`py-1.5 px-2 text-left font-medium ${peBg} ${
@@ -540,3 +512,4 @@ export default function OptionChainPage() {
     </main>
   );
 }
+
