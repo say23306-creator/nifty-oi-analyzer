@@ -60,6 +60,7 @@ export default function OptionChainPage() {
   // Filters
   const [selectedExpiry, setSelectedExpiry] = useState<string>('');
   const [selectedStrike, setSelectedStrike] = useState<string>('all');
+  const [searchStrike, setSearchStrike] = useState<string>('');
 
   // ── Simplified Time Range States ──────────────────────────────────────────
   const [snapshotsList, setSnapshotsList] = useState<SnapshotItem[]>([]);
@@ -345,22 +346,11 @@ export default function OptionChainPage() {
   // Filter strikes
   const filteredChainRows = useMemo(() => {
     if (!data || !data.rows) return [];
-    if (selectedStrike === 'all') return data.rows;
-    if (selectedStrike.startsWith('±')) {
-      const count = parseInt(selectedStrike.replace('±', ''), 10);
-      const atmIndex = data.rows.findIndex((r) => r.isATM);
-      if (atmIndex === -1) return data.rows;
-      const start = Math.max(0, atmIndex - count);
-      const end = Math.min(data.rows.length, atmIndex + count + 1);
-      return data.rows.slice(start, end);
+    let rows = data.rows;
+    const cleanSearch = searchStrike.trim().replace(/,/g, '');
+    if (cleanSearch) {
+      return rows.filter((r) => r.strike.toString().includes(cleanSearch));
     }
-    const target = parseInt(selectedStrike, 10);
-    return data.rows.filter((r) => r.strike === target);
-  }, [data, selectedStrike]);
-
-  const filteredComparisonRows = useMemo(() => {
-    if (!comparisonData || !comparisonData.rows) return [];
-    const rows: ComparedStrikeRow[] = comparisonData.rows;
     if (selectedStrike === 'all') return rows;
     if (selectedStrike.startsWith('±')) {
       const count = parseInt(selectedStrike.replace('±', ''), 10);
@@ -372,7 +362,27 @@ export default function OptionChainPage() {
     }
     const target = parseInt(selectedStrike, 10);
     return rows.filter((r) => r.strike === target);
-  }, [comparisonData, selectedStrike]);
+  }, [data, selectedStrike, searchStrike]);
+
+  const filteredComparisonRows = useMemo(() => {
+    if (!comparisonData || !comparisonData.rows) return [];
+    let rows: ComparedStrikeRow[] = comparisonData.rows;
+    const cleanSearch = searchStrike.trim().replace(/,/g, '');
+    if (cleanSearch) {
+      return rows.filter((r) => r.strike.toString().includes(cleanSearch));
+    }
+    if (selectedStrike === 'all') return rows;
+    if (selectedStrike.startsWith('±')) {
+      const count = parseInt(selectedStrike.replace('±', ''), 10);
+      const atmIndex = rows.findIndex((r) => r.isATM);
+      if (atmIndex === -1) return rows;
+      const start = Math.max(0, atmIndex - count);
+      const end = Math.min(rows.length, atmIndex + count + 1);
+      return rows.slice(start, end);
+    }
+    const target = parseInt(selectedStrike, 10);
+    return rows.filter((r) => r.strike === target);
+  }, [comparisonData, selectedStrike, searchStrike]);
 
   const spot = data?.spot || 23053.10;
 
@@ -495,6 +505,31 @@ export default function OptionChainPage() {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              {/* Instant Strike Search Input */}
+              <div className="flex items-center relative">
+                <div className="relative flex items-center">
+                  <span className="absolute left-2 text-gray-400 pointer-events-none text-[10px]">
+                    🔍
+                  </span>
+                  <input
+                    type="text"
+                    value={searchStrike}
+                    onChange={(e) => setSearchStrike(e.target.value)}
+                    placeholder="Search Strike (e.g. 23000)"
+                    className="h-6 pl-6 pr-6 py-0.5 rounded border border-[#d0d7de] bg-white text-[#2b2259] font-semibold text-[11px] placeholder:text-gray-400 placeholder:font-normal focus:outline-none focus:border-[#2b2259] focus:ring-1 focus:ring-[#2b2259] w-36 sm:w-44 transition"
+                  />
+                  {searchStrike && (
+                    <button
+                      onClick={() => setSearchStrike('')}
+                      title="Clear search"
+                      className="absolute right-1.5 text-gray-400 hover:text-gray-700 cursor-pointer p-0.5 text-[10px] font-bold"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -687,7 +722,13 @@ export default function OptionChainPage() {
                   ) : filteredComparisonRows.length === 0 ? (
                     <tr>
                       <td colSpan={9} className="py-8 text-center text-gray-500">
-                        No strike comparison data available. Please click on one of the hour boxes above.
+                        {searchStrike ? (
+                          <span>
+                            No strike found matching <span className="font-bold text-[#2b2259]">"{searchStrike}"</span>. Try another strike or clear search.
+                          </span>
+                        ) : (
+                          'No strike comparison data available. Please click on one of the hour boxes above.'
+                        )}
                       </td>
                     </tr>
                   ) : (
@@ -827,7 +868,20 @@ export default function OptionChainPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#e6e6e6]">
-                {filteredChainRows.map((row) => {
+                {filteredChainRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="py-8 text-center text-gray-500">
+                      {searchStrike ? (
+                        <span>
+                          No strike found matching <span className="font-bold text-[#2b2259]">"{searchStrike}"</span>. Try another strike or clear search.
+                        </span>
+                      ) : (
+                        'No option chain data available.'
+                      )}
+                    </td>
+                  </tr>
+                ) : (
+                  filteredChainRows.map((row) => {
                   const ceBg = row.isITMCall ? 'bg-[#fff7d6]' : 'bg-white';
                   const peBg = row.isITMPut ? 'bg-[#fff7d6]' : 'bg-white';
                   const isATM = row.isATM;
@@ -892,8 +946,9 @@ export default function OptionChainPage() {
                       </td>
                     </tr>
                   );
-                })}
-              </tbody>
+                })
+              )}
+            </tbody>
             </table>
           </div>
         )}
