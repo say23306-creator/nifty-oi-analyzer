@@ -34,9 +34,22 @@ interface StrikeHistoryStep {
   peAnalysis: any | null;
 }
 
+// Simple Indian market standard hourly slots
+const STANDARD_HOURLY_SLOTS = [
+  { id: '9-10', label: '9:15 - 10:15 AM', start: '09:15', end: '10:15' },
+  { id: '10-11', label: '10:15 - 11:15 AM', start: '10:15', end: '11:15' },
+  { id: '11-12', label: '11:15 - 12:15 PM', start: '11:15', end: '12:15' },
+  { id: '12-1', label: '12:15 - 1:15 PM', start: '12:15', end: '13:15' },
+  { id: '1-2', label: '1:15 - 2:15 PM', start: '13:15', end: '14:15' },
+  { id: '2-3', label: '2:15 - 3:15 PM', start: '14:15', end: '15:15' },
+  { id: '3-close', label: '3:15 - 3:30 PM (Close)', start: '15:15', end: '15:30' },
+  { id: 'open-now', label: 'Full Day (9:15 AM - Now)', start: '09:15', end: 'now' },
+  { id: 'yesterday-now', label: 'Since Yesterday Close (3:30 PM)', start: 'yesterday', end: 'now' },
+];
+
 export default function OptionChainPage() {
   // Mode selection
-  const [activeTab, setActiveTab] = useState<'chain' | 'price_to_oi'>('price_to_oi');
+  const [activeTab, setActiveTab] = useState<'price_to_oi' | 'chain'>('price_to_oi');
 
   // Standard Option Chain Data
   const [data, setData] = useState<OptionChainPayload | null>(null);
@@ -50,13 +63,17 @@ export default function OptionChainPage() {
   const [selectedStrike, setSelectedStrike] = useState<string>('all');
   const [streamingOn, setStreamingOn] = useState<boolean>(true);
 
-  // ── Price-to-OI Range Analyzer States ─────────────────────────────────────
+  // ── Simplified Time Range States ──────────────────────────────────────────
   const [snapshotsList, setSnapshotsList] = useState<SnapshotItem[]>([]);
+  const [selectedSlotId, setSelectedSlotId] = useState<string>('open-now');
   const [fromSnapshotId, setFromSnapshotId] = useState<number | null>(null);
   const [toSnapshotId, setToSnapshotId] = useState<number | null>(null);
   const [comparisonData, setComparisonData] = useState<any | null>(null);
   const [comparisonLoading, setComparisonLoading] = useState(false);
-  const [activePreset, setActivePreset] = useState<string>('1h');
+
+  // Custom Time Dropdowns (Simple Start Time -> End Time)
+  const [customStartTime, setCustomStartTime] = useState<string>('09:15 AM');
+  const [customEndTime, setCustomEndTime] = useState<string>('Current');
 
   // ── Strike Deep-Dive Inspector Modal ──────────────────────────────────────
   const [modalStrike, setModalStrike] = useState<number | null>(null);
@@ -88,7 +105,7 @@ export default function OptionChainPage() {
     }
   }, [selectedExpiry]);
 
-  // 2. Fetch list of available snapshots for the range selector
+  // 2. Fetch list of available snapshots
   const fetchSnapshotsList = useCallback(async () => {
     try {
       const res = await fetch('/api/snapshots?limit=50', { cache: 'no-store' });
@@ -97,7 +114,7 @@ export default function OptionChainPage() {
         const list: SnapshotItem[] = json.snapshots;
         setSnapshotsList(list);
 
-        // Default: To = latest snapshot (index 0), From = previous snapshot (index 1)
+        // Default to the two most relevant snapshots
         if (list.length >= 2) {
           setToSnapshotId(list[0].id);
           setFromSnapshotId(list[1].id);
@@ -134,7 +151,7 @@ export default function OptionChainPage() {
     fetchSnapshotsList();
   }, [fetchData, fetchSnapshotsList]);
 
-  // Trigger comparison when from/to change
+  // Trigger comparison when from/to IDs change
   useEffect(() => {
     if (fromSnapshotId && toSnapshotId) {
       fetchComparison(fromSnapshotId, toSnapshotId);
@@ -151,34 +168,36 @@ export default function OptionChainPage() {
     return () => clearInterval(interval);
   }, [streamingOn, selectedExpiry, fetchData, fetchSnapshotsList]);
 
-  // Quick Preset Handlers
-  const handlePreset = (type: '1h' | '2h' | 'open' | 'yesterday') => {
-    setActivePreset(type);
+  // Handle Simple Hour Slot Click
+  const handleSlotClick = (slot: typeof STANDARD_HOURLY_SLOTS[0]) => {
+    setSelectedSlotId(slot.id);
     if (!snapshotsList.length) return;
+
     const latest = snapshotsList[0];
     setToSnapshotId(latest.id);
 
-    if (type === '1h') {
-      const prev = snapshotsList.length > 1 ? snapshotsList[1] : latest;
-      setFromSnapshotId(prev.id);
-    } else if (type === '2h') {
-      const prev2 = snapshotsList.length > 2 ? snapshotsList[2] : (snapshotsList[1] || latest);
-      setFromSnapshotId(prev2.id);
-    } else if (type === 'open') {
-      // Find today's earliest snapshot (or one labeled 09:15)
+    if (slot.id === 'open-now') {
+      // From opening snapshot of today
       const today = latest.date;
       const todaySnaps = snapshotsList.filter((s) => s.date === today);
       const openSnap = todaySnaps[todaySnaps.length - 1] || latest;
       setFromSnapshotId(openSnap.id);
-    } else if (type === 'yesterday') {
-      // Find previous date snapshot (e.g. 15:30 close)
+    } else if (slot.id === 'yesterday-now') {
+      // From yesterday's closing snapshot
       const today = latest.date;
       const yesterdaySnap = snapshotsList.find((s) => s.date !== today);
-      if (yesterdaySnap) {
-        setFromSnapshotId(yesterdaySnap.id);
-      } else {
-        const oldest = snapshotsList[snapshotsList.length - 1];
-        setFromSnapshotId(oldest.id);
+      setFromSnapshotId(yesterdaySnap ? yesterdaySnap.id : snapshotsList[snapshotsList.length - 1].id);
+    } else {
+      // Try to find matching checkpoint or fall back to previous snapshot
+      const matchStart = snapshotsList.find((s) => s.checkpoint.includes(slot.start));
+      const matchEnd = snapshotsList.find((s) => s.checkpoint.includes(slot.end));
+
+      if (matchStart && matchEnd) {
+        setFromSnapshotId(matchStart.id);
+        setToSnapshotId(matchEnd.id);
+      } else if (snapshotsList.length >= 2) {
+        setFromSnapshotId(snapshotsList[1].id);
+        setToSnapshotId(latest.id);
       }
     }
   };
@@ -219,12 +238,12 @@ export default function OptionChainPage() {
     return <span className={`${color} font-semibold text-[11px]`}>{text}{isPercent ? '%' : ''}</span>;
   };
 
-  // Render Price-to-OI Observation Badge
+  // Human-friendly Indian-simple observation badge
   const renderObservationBadge = (obs: string, optView: string, eqView: string, isCall: boolean) => {
     if (!obs || obs === 'NEUTRAL / SIMILAR') {
       return (
-        <span className="px-1.5 py-0.5 rounded text-[9.5px] font-medium bg-gray-100 text-gray-600 border border-gray-200">
-          Similar
+        <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-200">
+          No Big Change
         </span>
       );
     }
@@ -232,14 +251,13 @@ export default function OptionChainPage() {
     if (obs === 'LONG BUILD UP') {
       return (
         <span
-          className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold border ${
+          className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
             isCall
-              ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
-              : 'bg-red-50 text-red-700 border-red-300'
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+              : 'bg-rose-50 text-rose-800 border-rose-300'
           }`}
-          title={isCall ? 'Call Long Buildup: Nifty Bullish' : 'Put Long Buildup: Nifty Bearish'}
         >
-          {isCall ? '🟢 Long Buildup' : '🔴 Long Buildup (Bearish)'}
+          {isCall ? '🟢 Call Buying (Bullish)' : '🔴 Put Buying (Bearish)'}
         </span>
       );
     }
@@ -247,14 +265,13 @@ export default function OptionChainPage() {
     if (obs === 'SHORT COVERING') {
       return (
         <span
-          className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold border ${
+          className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
             isCall
-              ? 'bg-emerald-100 text-emerald-800 border-emerald-400'
-              : 'bg-rose-100 text-rose-800 border-rose-400'
+              ? 'bg-emerald-100 text-emerald-900 border-emerald-400'
+              : 'bg-rose-100 text-rose-900 border-rose-400'
           }`}
-          title={isCall ? 'Call Short Covering: Strongly Bullish Squeeze' : 'Put Short Covering: Strongly Bearish Panic'}
         >
-          {isCall ? '🚀 Short Covering' : '🔻 Short Covering (Downside)'}
+          {isCall ? '🚀 Call Short Covering (Strong Bullish)' : '🔻 Put Short Covering (Downside Panic)'}
         </span>
       );
     }
@@ -262,14 +279,13 @@ export default function OptionChainPage() {
     if (obs === 'SHORT BUILD UP') {
       return (
         <span
-          className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold border ${
+          className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
             isCall
-              ? 'bg-red-50 text-red-700 border-red-300'
-              : 'bg-emerald-50 text-emerald-700 border-emerald-300'
+              ? 'bg-red-50 text-red-800 border-red-300'
+              : 'bg-emerald-50 text-emerald-800 border-emerald-300'
           }`}
-          title={isCall ? 'Call Writing: Heavy Resistance' : 'Put Writing: Support Floor establishing'}
         >
-          {isCall ? '🔴 Short Buildup' : '🟢 Short Buildup (Support)'}
+          {isCall ? '🔴 Call Writing (Heavy Resistance)' : '🟢 Put Writing (Strong Support Floor)'}
         </span>
       );
     }
@@ -277,23 +293,63 @@ export default function OptionChainPage() {
     if (obs === 'LONG COVERING') {
       return (
         <span
-          className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold border ${
+          className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
             isCall
-              ? 'bg-rose-50 text-rose-700 border-rose-300'
-              : 'bg-teal-50 text-teal-700 border-teal-300'
+              ? 'bg-rose-50 text-rose-800 border-rose-300'
+              : 'bg-teal-50 text-teal-800 border-teal-300'
           }`}
-          title={isCall ? 'Call Long Covering: Strongly Bearish' : 'Put Unwinding: Strongly Bullish Lift'}
         >
-          {isCall ? '🔻 Long Covering' : '🟢 Long Covering (Bullish)'}
+          {isCall ? '🔻 Call Unwinding (Strong Bearish)' : '🟢 Put Unwinding (Bullish Lift)'}
         </span>
       );
     }
 
     return (
-      <span className="px-1.5 py-0.5 rounded text-[9.5px] font-medium bg-gray-100 text-gray-600">
+      <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600">
         {obs}
       </span>
     );
+  };
+
+  // CSV download function
+  const downloadCSV = () => {
+    if (!data || !data.rows) return;
+    const headers = [
+      'CALLS_OI',
+      'CALLS_CHNG_IN_OI',
+      'CALLS_LTP',
+      'CALLS_CHNG',
+      'STRIKE',
+      'PUTS_CHNG',
+      'PUTS_LTP',
+      'PUTS_CHNG_IN_OI',
+      'PUTS_OI',
+    ];
+
+    const csvRows = [headers.join(',')];
+    for (const r of data.rows) {
+      csvRows.push(
+        [
+          r.ce.oi,
+          r.ce.change_oi,
+          r.ce.ltp,
+          r.ce.price_change,
+          r.strike,
+          r.pe.price_change,
+          r.pe.ltp,
+          r.pe.change_oi,
+          r.pe.oi,
+        ].join(',')
+      );
+    }
+
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `nifty-oi-analysis-${data.expiry || 'latest'}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
   };
 
   // Filter strikes
@@ -343,9 +399,9 @@ export default function OptionChainPage() {
                 alt="Price to OI Logo"
                 className="w-7 h-7 rounded-full object-cover border border-[#2b2259]/30 shadow-xs"
               />
-              <span className="text-[#333333] font-normal text-[13px]">Underlying Index :</span>
+              <span className="text-[#333333] font-normal text-[13px]">Nifty 50 Index :</span>
               <span className="font-bold text-[#111111] text-[15px]">
-                {selectedSymbol} {formatIndianNumber(spot, 2)}
+                {formatIndianNumber(spot, 2)}
               </span>
               <span className="text-[#666666] text-[11px] ml-1">
                 LTP: <span className="font-semibold text-[#111]">{formatIndianNumber(data?.ltp || spot, 2)}</span>
@@ -368,27 +424,40 @@ export default function OptionChainPage() {
             </div>
 
             {/* Mode Switcher Tabs */}
-            <div className="flex items-center bg-[#f0f2f5] p-0.5 rounded-lg border border-[#d0d7de]">
+            <div className="flex items-center gap-2">
               <button
-                onClick={() => setActiveTab('price_to_oi')}
-                className={`px-3 py-1 rounded-md text-[11.5px] font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                  activeTab === 'price_to_oi'
-                    ? 'bg-[#2b2259] text-white shadow-xs'
-                    : 'text-[#555] hover:text-[#111]'
-                }`}
+                onClick={downloadCSV}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium text-[#333] border border-[#d0d7de] hover:bg-gray-50 transition cursor-pointer"
+                title="Download Option Chain CSV"
               >
-                <span>🎯 Price-to-OI Range Analyzer</span>
+                <svg className="w-3.5 h-3.5 text-[#d93025]" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zM6 20V4h7v5h5v11H6z" />
+                </svg>
+                <span>Download CSV</span>
               </button>
-              <button
-                onClick={() => setActiveTab('chain')}
-                className={`px-3 py-1 rounded-md text-[11.5px] font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                  activeTab === 'chain'
-                    ? 'bg-[#2b2259] text-white shadow-xs'
-                    : 'text-[#555] hover:text-[#111]'
-                }`}
-              >
-                <span>⚡ Live Option Chain</span>
-              </button>
+
+              <div className="flex items-center bg-[#f0f2f5] p-0.5 rounded-lg border border-[#d0d7de]">
+                <button
+                  onClick={() => setActiveTab('price_to_oi')}
+                  className={`px-3 py-1 rounded-md text-[11.5px] font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                    activeTab === 'price_to_oi'
+                      ? 'bg-[#2b2259] text-white shadow-xs'
+                      : 'text-[#555] hover:text-[#111]'
+                  }`}
+                >
+                  <span>🎯 Hourly OI Analyzer</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('chain')}
+                  className={`px-3 py-1 rounded-md text-[11.5px] font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                    activeTab === 'chain'
+                      ? 'bg-[#2b2259] text-white shadow-xs'
+                      : 'text-[#555] hover:text-[#111]'
+                  }`}
+                >
+                  <span>⚡ NSE Option Chain</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -420,7 +489,7 @@ export default function OptionChainPage() {
 
               {/* Strike Filter */}
               <div className="flex items-center gap-1">
-                <span className="text-[#666]">Filter:</span>
+                <span className="text-[#666]">Strikes:</span>
                 <select
                   value={selectedStrike}
                   onChange={(e) => setSelectedStrike(e.target.value)}
@@ -457,102 +526,102 @@ export default function OptionChainPage() {
           </div>
         </div>
 
-        {/* ── TAB 1: PRICE-TO-OI RANGE ANALYZER ───────────────────────────────── */}
+        {/* ── TAB 1: HOURLY PRICE-TO-OI ANALYZER ───────────────────────────────── */}
         {activeTab === 'price_to_oi' && (
           <div className="flex flex-col gap-3">
-            {/* Range Selection Bar */}
-            <div className="bg-[#fafbfc] border border-[#d0d7de] rounded-lg p-3 flex flex-col gap-2.5">
+            {/* ── Simple Hourly Time-Slot Selection Boxes ── */}
+            <div className="bg-[#fafbfc] border border-[#d0d7de] rounded-lg p-3 sm:p-3.5 flex flex-col gap-2.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-[#2b2259] text-[12px] flex items-center gap-1">
-                    <span>⏱️ Historical Comparison Range:</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[13px] font-bold text-[#2b2259] flex items-center gap-1">
+                    <span>⏰ Choose Time Window:</span>
+                  </span>
+                  <span className="text-gray-500 text-[11px]">
+                    (Select any hour box to see what happened in that specific time)
                   </span>
                 </div>
 
-                {/* Quick Presets */}
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[#666] text-[11px] mr-1">Presets:</span>
-                  <button
-                    onClick={() => handlePreset('1h')}
-                    className={`px-2 py-0.5 rounded text-[10.5px] font-semibold cursor-pointer border ${
-                      activePreset === '1h'
-                        ? 'bg-[#2b2259] text-white border-[#2b2259]'
-                        : 'bg-white text-[#333] border-[#ccc] hover:bg-gray-50'
-                    }`}
-                  >
-                    1 Hour (1R)
-                  </button>
-                  <button
-                    onClick={() => handlePreset('2h')}
-                    className={`px-2 py-0.5 rounded text-[10.5px] font-semibold cursor-pointer border ${
-                      activePreset === '2h'
-                        ? 'bg-[#2b2259] text-white border-[#2b2259]'
-                        : 'bg-white text-[#333] border-[#ccc] hover:bg-gray-50'
-                    }`}
-                  >
-                    2 Hours (2R)
-                  </button>
-                  <button
-                    onClick={() => handlePreset('open')}
-                    className={`px-2 py-0.5 rounded text-[10.5px] font-semibold cursor-pointer border ${
-                      activePreset === 'open'
-                        ? 'bg-[#2b2259] text-white border-[#2b2259]'
-                        : 'bg-white text-[#333] border-[#ccc] hover:bg-gray-50'
-                    }`}
-                  >
-                    Since Open (09:15)
-                  </button>
-                  <button
-                    onClick={() => handlePreset('yesterday')}
-                    className={`px-2 py-0.5 rounded text-[10.5px] font-semibold cursor-pointer border ${
-                      activePreset === 'yesterday'
-                        ? 'bg-[#2b2259] text-white border-[#2b2259]'
-                        : 'bg-white text-[#333] border-[#ccc] hover:bg-gray-50'
-                    }`}
-                  >
-                    Since Yesterday Close
-                  </button>
+                {/* Friendly indicator */}
+                <div className="text-[10.5px] text-[#ea6212] font-semibold bg-[#fff8f2] px-2 py-0.5 rounded border border-[#fed7aa]">
+                  Live Hourly Updates: Every Hour from 9:15 AM to 3:30 PM
                 </div>
               </div>
 
-              {/* Snapshot Selectors */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1 border-t border-[#e1e4e8]">
-                {/* FROM SELECTOR */}
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-[#b33a00] text-[11.5px] min-w-[55px]">FROM (R1):</span>
-                  <select
-                    value={fromSnapshotId || ''}
-                    onChange={(e) => {
-                      setFromSnapshotId(Number(e.target.value));
-                      setActivePreset('custom');
-                    }}
-                    className="flex-1 h-7.5 px-2 rounded border border-[#d0d7de] bg-white font-medium text-[11px] text-[#222] focus:outline-none cursor-pointer"
-                  >
-                    {snapshotsList.map((s) => (
-                      <option key={`from_${s.id}`} value={s.id}>
-                        {s.date} • {s.time} IST [{s.checkpoint}] (Spot: {s.spot.toFixed(1)})
-                      </option>
-                    ))}
-                  </select>
+              {/* Clickable Time Boxes (Clean, Big, Common Indian Friendly) */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-5 gap-2 pt-1">
+                {STANDARD_HOURLY_SLOTS.map((slot) => {
+                  const isSelected = selectedSlotId === slot.id;
+                  return (
+                    <button
+                      key={slot.id}
+                      onClick={() => handleSlotClick(slot)}
+                      className={`p-2 rounded-lg text-center font-bold text-[11px] transition-all cursor-pointer flex flex-col items-center justify-center border shadow-2xs ${
+                        isSelected
+                          ? 'bg-[#2b2259] text-white border-[#2b2259] ring-2 ring-[#2b2259]/30 scale-[1.02]'
+                          : 'bg-white text-[#333] border-[#d0d7de] hover:border-[#2b2259] hover:bg-[#f8fafc]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => {}}
+                          className="w-3.5 h-3.5 rounded text-[#2b2259] cursor-pointer"
+                        />
+                        <span className="tracking-tight">{slot.label}</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Simple Custom Comparison Dropdown (If User wants specific Start Time and End Time) */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-[#e1e4e8] text-[11px] text-gray-700">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-bold text-[#555]">Or Pick Exact Hours:</span>
+                  
+                  <div className="flex items-center gap-1">
+                    <span className="text-gray-500">From:</span>
+                    <select
+                      value={fromSnapshotId || ''}
+                      onChange={(e) => {
+                        setFromSnapshotId(Number(e.target.value));
+                        setSelectedSlotId('custom');
+                      }}
+                      className="h-7 px-2 rounded border border-[#d0d7de] bg-white text-[#222] font-medium text-[11px] focus:outline-none cursor-pointer"
+                    >
+                      {snapshotsList.map((s) => (
+                        <option key={`from_${s.id}`} value={s.id}>
+                          {s.time} IST [{s.checkpoint}] • {s.date}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <span className="text-gray-400">➔</span>
+
+                  <div className="flex items-center gap-1">
+                    <span className="text-gray-500">To:</span>
+                    <select
+                      value={toSnapshotId || ''}
+                      onChange={(e) => {
+                        setToSnapshotId(Number(e.target.value));
+                        setSelectedSlotId('custom');
+                      }}
+                      className="h-7 px-2 rounded border border-[#d0d7de] bg-white text-[#222] font-medium text-[11px] focus:outline-none cursor-pointer"
+                    >
+                      {snapshotsList.map((s) => (
+                        <option key={`to_${s.id}`} value={s.id}>
+                          {s.time} IST [{s.checkpoint}] • {s.date}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
-                {/* TO SELECTOR */}
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-[#006622] text-[11.5px] min-w-[55px]">TO (R2):</span>
-                  <select
-                    value={toSnapshotId || ''}
-                    onChange={(e) => {
-                      setToSnapshotId(Number(e.target.value));
-                      setActivePreset('custom');
-                    }}
-                    className="flex-1 h-7.5 px-2 rounded border border-[#d0d7de] bg-white font-medium text-[11px] text-[#222] focus:outline-none cursor-pointer"
-                  >
-                    {snapshotsList.map((s) => (
-                      <option key={`to_${s.id}`} value={s.id}>
-                        {s.date} • {s.time} IST [{s.checkpoint}] (Spot: {s.spot.toFixed(1)})
-                      </option>
-                    ))}
-                  </select>
+                <div className="text-[11px] text-[#666]">
+                  Comparing: <span className="font-bold text-[#111]">{comparisonData?.from?.checkpoint || 'Start'}</span> ➔{' '}
+                  <span className="font-bold text-[#111]">{comparisonData?.to?.checkpoint || 'End'}</span>
                 </div>
               </div>
             </div>
@@ -562,9 +631,9 @@ export default function OptionChainPage() {
               <div className="bg-gradient-to-r from-[#fafbfc] to-white border border-[#d0d7de] rounded-lg p-3.5 flex flex-col gap-2.5 shadow-xs">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <span className="text-[#555] font-normal text-[12px]">Institutional Price-to-OI Stance:</span>
+                    <span className="text-[#444] font-semibold text-[12px]">Market Position in this Time Window:</span>
                     <span
-                      className={`px-2.5 py-0.5 rounded text-[12px] font-black uppercase tracking-wider ${
+                      className={`px-3 py-1 rounded-md text-[12px] font-black uppercase tracking-wider ${
                         comparisonData.summary.marketStance === 'STRONG BULLISH'
                           ? 'bg-emerald-600 text-white'
                           : comparisonData.summary.marketStance === 'BULLISH'
@@ -573,23 +642,27 @@ export default function OptionChainPage() {
                           ? 'bg-rose-700 text-white'
                           : comparisonData.summary.marketStance === 'BEARISH'
                           ? 'bg-rose-500 text-white'
-                          : 'bg-gray-500 text-white'
+                          : 'bg-gray-600 text-white'
                       }`}
                     >
-                      {comparisonData.summary.marketStance}
+                      {comparisonData.summary.marketStance === 'STRONG BULLISH' && '🚀 STRONGLY BULLISH'}
+                      {comparisonData.summary.marketStance === 'BULLISH' && '🟢 BULLISH'}
+                      {comparisonData.summary.marketStance === 'NEUTRAL' && '⚪ SIDEWAYS / NEUTRAL'}
+                      {comparisonData.summary.marketStance === 'BEARISH' && '🔴 BEARISH'}
+                      {comparisonData.summary.marketStance === 'STRONG BEARISH' && '🔻 STRONGLY BEARISH'}
                     </span>
                   </div>
 
                   {/* Spot & PCR Shift */}
-                  <div className="flex items-center gap-3 text-[11px]">
+                  <div className="flex items-center gap-3 text-[11.5px]">
                     <div>
-                      Spot Shift:{' '}
+                      Nifty Spot Moved:{' '}
                       <span className={`font-bold ${comparisonData.deltaSpot >= 0 ? 'text-[#008000]' : 'text-[#d32f2f]'}`}>
                         {comparisonData.deltaSpot >= 0 ? `+${comparisonData.deltaSpot}` : comparisonData.deltaSpot} pts
                       </span>
                     </div>
                     <div>
-                      PCR Shift:{' '}
+                      PCR Moved:{' '}
                       <span className={`font-bold ${comparisonData.deltaPCR >= 0 ? 'text-[#008000]' : 'text-[#d32f2f]'}`}>
                         {comparisonData.deltaPCR >= 0 ? `+${comparisonData.deltaPCR}` : comparisonData.deltaPCR}
                       </span>
@@ -597,32 +670,32 @@ export default function OptionChainPage() {
                   </div>
                 </div>
 
-                {/* Counter Breakdown Grid */}
+                {/* Counter Breakdown Grid (Simple, Clear English) */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10.5px] pt-1">
-                  <div className="bg-white border border-gray-200 rounded p-1.5 flex flex-col">
-                    <span className="text-gray-500 font-medium">Calls Long Buildup:</span>
-                    <span className="font-bold text-emerald-700 text-[12px]">{comparisonData.summary.ce.longBuildup} strikes</span>
+                  <div className="bg-white border border-gray-200 rounded-lg p-2 flex flex-col">
+                    <span className="text-gray-500 font-medium">Call Buying (Bullish):</span>
+                    <span className="font-bold text-emerald-700 text-[13px]">{comparisonData.summary.ce.longBuildup} strikes</span>
                   </div>
-                  <div className="bg-white border border-gray-200 rounded p-1.5 flex flex-col">
-                    <span className="text-gray-500 font-medium">Calls Short Buildup (Writing):</span>
-                    <span className="font-bold text-red-700 text-[12px]">{comparisonData.summary.ce.shortBuildup} strikes</span>
+                  <div className="bg-white border border-gray-200 rounded-lg p-2 flex flex-col">
+                    <span className="text-gray-500 font-medium">Call Writing (Resistance):</span>
+                    <span className="font-bold text-red-700 text-[13px]">{comparisonData.summary.ce.shortBuildup} strikes</span>
                   </div>
-                  <div className="bg-white border border-gray-200 rounded p-1.5 flex flex-col">
-                    <span className="text-gray-500 font-medium">Puts Long Buildup (Put Buying):</span>
-                    <span className="font-bold text-red-700 text-[12px]">{comparisonData.summary.pe.longBuildup} strikes</span>
+                  <div className="bg-white border border-gray-200 rounded-lg p-2 flex flex-col">
+                    <span className="text-gray-500 font-medium">Put Buying (Downside):</span>
+                    <span className="font-bold text-red-700 text-[13px]">{comparisonData.summary.pe.longBuildup} strikes</span>
                   </div>
-                  <div className="bg-white border border-gray-200 rounded p-1.5 flex flex-col">
-                    <span className="text-gray-500 font-medium">Puts Short Buildup (Support Floor):</span>
-                    <span className="font-bold text-emerald-700 text-[12px]">{comparisonData.summary.pe.shortBuildup} strikes</span>
+                  <div className="bg-white border border-gray-200 rounded-lg p-2 flex flex-col">
+                    <span className="text-gray-500 font-medium">Put Writing (Support Floor):</span>
+                    <span className="font-bold text-emerald-700 text-[13px]">{comparisonData.summary.pe.shortBuildup} strikes</span>
                   </div>
                 </div>
 
                 {/* Key Observations */}
                 {comparisonData.summary.keyObservations?.length > 0 && (
-                  <div className="text-[11px] text-[#444] pt-1 border-t border-gray-100 flex flex-col gap-0.5">
+                  <div className="text-[11px] text-[#333] pt-1.5 border-t border-gray-100 flex flex-col gap-1">
                     {comparisonData.summary.keyObservations.map((obs: string, idx: number) => (
                       <div key={idx} className="flex items-center gap-1.5">
-                        <span className="text-[#ea6212] font-bold">•</span>
+                        <span className="text-[#ea6212] font-bold">✔</span>
                         <span>{obs}</span>
                       </div>
                     ))}
@@ -638,22 +711,22 @@ export default function OptionChainPage() {
                   {/* Master Header */}
                   <tr className="bg-[#2b2259] text-white font-bold text-center border-b border-[#3e3478]">
                     <th colSpan={5} className="py-1.5 text-center tracking-wider border-r-2 border-white/20">
-                      CALLS (CE) • Price-to-OI Action
+                      CALLS (CE) • What Happened in this Hour
                     </th>
                     <th className="py-1.5 px-3 text-center border-r-2 border-white/20 bg-[#1f1842]">
                       STRIKE
                     </th>
                     <th colSpan={5} className="py-1.5 text-center tracking-wider">
-                      PUTS (PE) • Price-to-OI Action
+                      PUTS (PE) • What Happened in this Hour
                     </th>
                   </tr>
                   {/* Sub Header */}
                   <tr className="bg-[#2b2259] text-white text-[10.5px] border-b border-gray-300">
                     <th className="py-1 px-2 text-center border-r border-white/10">CONCLUSION</th>
-                    <th className="py-1 px-2 text-right border-r border-white/10">OI (Δ OI)</th>
+                    <th className="py-1 px-2 text-right border-r border-white/10">OI (CHANGE)</th>
                     <th className="py-1 px-2 text-right border-r border-white/10">LTP</th>
-                    <th className="py-1 px-2 text-right border-r border-white/10">Δ PRICE</th>
-                    <th className="py-1 px-2 text-center border-r-2 border-white/20">FROM → TO</th>
+                    <th className="py-1 px-2 text-right border-r border-white/10">PRICE CHG</th>
+                    <th className="py-1 px-2 text-center border-r-2 border-white/20">PRICE SHIFT</th>
 
                     {/* Strike */}
                     <th className="py-1 px-3 text-center border-r-2 border-white/20 bg-[#1f1842]">
@@ -661,10 +734,10 @@ export default function OptionChainPage() {
                     </th>
 
                     {/* Puts */}
-                    <th className="py-1 px-2 text-center border-r border-white/10">FROM → TO</th>
-                    <th className="py-1 px-2 text-right border-r border-white/10">Δ PRICE</th>
+                    <th className="py-1 px-2 text-center border-r border-white/10">PRICE SHIFT</th>
+                    <th className="py-1 px-2 text-right border-r border-white/10">PRICE CHG</th>
                     <th className="py-1 px-2 text-right border-r border-white/10">LTP</th>
-                    <th className="py-1 px-2 text-right border-r border-white/10">OI (Δ OI)</th>
+                    <th className="py-1 px-2 text-right border-r border-white/10">OI (CHANGE)</th>
                     <th className="py-1 px-2 text-center">CONCLUSION</th>
                   </tr>
                 </thead>
@@ -674,14 +747,14 @@ export default function OptionChainPage() {
                       <td colSpan={11} className="py-12 text-center text-gray-500 font-medium">
                         <div className="flex items-center justify-center gap-2">
                           <div className="w-5 h-5 border-2 border-[#2b2259] border-t-transparent rounded-full animate-spin" />
-                          <span>Computing Price-to-OI differentials across snapshots...</span>
+                          <span>Calculating hourly changes for this time range...</span>
                         </div>
                       </td>
                     </tr>
                   ) : filteredComparisonRows.length === 0 ? (
                     <tr>
                       <td colSpan={11} className="py-8 text-center text-gray-500">
-                        No strike comparison data available. Please select valid From & To snapshots above.
+                        No strike comparison data available. Please click on one of the hour boxes above.
                       </td>
                     </tr>
                   ) : (
@@ -732,7 +805,7 @@ export default function OptionChainPage() {
                               isATM ? 'bg-[#e7f1ff] text-[#0055b8]' : 'bg-[#fafafa] text-[#0055b8]'
                             }`}
                             onClick={() => openStrikeModal(row.strike)}
-                            title="Click to view full hourly timeline for this strike"
+                            title="Click on strike to view its hourly journey"
                           >
                             <div className="flex items-center justify-center gap-1">
                               <span className="underline hover:text-[#003380]">{formatIndianNumber(row.strike, 2)}</span>
@@ -894,7 +967,7 @@ export default function OptionChainPage() {
             * Data source: NSE India • Snapshot Checkpoint: <span className="font-semibold text-[#111]">{data?.checkpoint || 'LIVE'}</span>
           </div>
           <div>
-            Tip: Click on any <b>Strike Price</b> to inspect its hourly Price-to-OI timeline journey.
+            Tip: Click on any <b>Strike Price</b> to inspect its hourly journey.
           </div>
         </div>
       </div>
@@ -907,7 +980,7 @@ export default function OptionChainPage() {
             <div className="bg-[#2b2259] text-white p-3 sm:p-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-[16px] font-black tracking-wide">
-                  Strike {modalStrike} • Hourly Price-to-OI Timeline
+                  Strike {modalStrike} • Hourly Timeline Journey
                 </span>
                 <span className="text-[11px] bg-white/20 px-2 py-0.5 rounded font-mono">
                   {selectedSymbol}
@@ -935,19 +1008,19 @@ export default function OptionChainPage() {
               ) : (
                 <div className="flex flex-col gap-3">
                   <div className="text-[11.5px] text-[#444] bg-[#f8fafc] p-2.5 rounded-lg border border-[#e2e8f0]">
-                    Showing chronological step-by-step interpretation across each recorded hour. Check how Call and Put writers accumulated or unwound positions.
+                    Chronological step-by-step breakdown across each recorded hour. Check how Call and Put positions built up or covered.
                   </div>
 
                   <div className="border border-[#e1e4e8] rounded-lg overflow-hidden">
                     <table className="w-full text-left border-collapse text-[11px]">
                       <thead>
                         <tr className="bg-[#f0f2f5] text-[#333] font-bold border-b border-[#e1e4e8]">
-                          <th className="py-2 px-2.5 text-center">CHECKPOINT</th>
+                          <th className="py-2 px-2.5 text-center">TIME SLOT</th>
                           <th className="py-2 px-2 text-right">SPOT</th>
                           <th className="py-2 px-2 text-right">CE LTP (OI)</th>
-                          <th className="py-2 px-2 text-center">CALL CONCLUSION</th>
+                          <th className="py-2 px-2 text-center">CALL ACTION</th>
                           <th className="py-2 px-2 text-right">PE LTP (OI)</th>
-                          <th className="py-2 px-2 text-center">PUT CONCLUSION</th>
+                          <th className="py-2 px-2 text-center">PUT ACTION</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[#eee]">
